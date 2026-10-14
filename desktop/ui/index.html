@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bifrost</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Bifrost</h1>
+    <span id="statusChip" class="chip" role="status">Connexion…</span>
+  </header>
+
+  <div id="sessionBanner" class="banner" hidden>
+    <span id="sessionText"></span>
+    <button id="endSession" type="button" class="danger">Arrêter la session</button>
+  </div>
+
+  <main class="grid">
+    <section class="card" aria-labelledby="meTitle">
+      <h2 id="meTitle">Cet ordinateur</h2>
+      <p class="muted">Donnez cet identifiant à la personne qui doit se connecter.</p>
+      <div class="idrow">
+        <output id="myId" aria-label="Identifiant de cet ordinateur">--- --- ---</output>
+        <button id="copyId" type="button">Copier</button>
+      </div>
+
+      <h3>Accès sans surveillance</h3>
+      <p id="pwState" class="muted"></p>
+      <form id="pwForm" class="row" autocomplete="off">
+        <input id="pwInput" type="password" placeholder="Nouveau mot de passe (12 caractères minimum)" minlength="12" autocomplete="new-password">
+        <button type="submit">Définir</button>
+        <button id="pwClear" type="button" class="ghost" hidden>Supprimer</button>
+      </form>
+      <p id="pwError" class="error" role="alert" hidden></p>
+      <label class="check"><input id="requireConsent" type="checkbox"> Toujours demander mon accord, même avec le mot de passe</label>
+
+      <h3>Ce que les personnes connectées peuvent faire en plus</h3>
+      <label class="check"><input id="clipboard" type="checkbox"> Synchroniser le presse-papiers (texte)</label>
+      <label class="field">Transfert de fichiers
+        <select id="fileTransfer">
+          <option value="ask">Autorisé, avec mon accord à chaque fichier</option>
+          <option value="allow">Autorisé sans demander</option>
+          <option value="deny">Désactivé</option>
+        </select>
+      </label>
+
+      <h3>Dossiers partagés</h3>
+      <p class="muted">Les personnes connectées ne voient que ces dossiers, jamais le reste du disque.</p>
+      <ul id="shares" class="list"></ul>
+      <div class="row">
+        <button id="addShare" type="button">Ajouter un dossier…</button>
+        <button id="openTransfers" type="button" class="ghost">Ouvrir le dossier des fichiers reçus</button>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="remoteTitle">
+      <h2 id="remoteTitle">Contrôler un autre ordinateur</h2>
+      <form id="connectForm" autocomplete="off">
+        <label class="field">Identifiant
+          <input id="remoteId" inputmode="numeric" placeholder="123 456 789" maxlength="11" required>
+        </label>
+        <label class="field">Mot de passe <span class="muted">(accès sans surveillance, facultatif)</span>
+          <input id="remotePassword" type="password" autocomplete="off">
+        </label>
+        <fieldset>
+          <label class="check"><input type="radio" name="mode" value="control" checked> Prendre le contrôle</label>
+          <label class="check"><input type="radio" name="mode" value="view"> Voir seulement</label>
+        </fieldset>
+        <button id="connectBtn" type="submit" class="primary">Se connecter</button>
+      </form>
+      <p id="connectError" class="error" role="alert" hidden></p>
+
+      <h3>Récents</h3>
+      <ul id="recent" class="list"></ul>
+      <p id="noRecent" class="muted">Aucune connexion pour l’instant.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <details>
+      <summary>Paramètres</summary>
+      <div class="settings">
+        <form id="serverForm" class="row" autocomplete="off">
+          <label class="field grow">Serveur Bifrost
+            <input id="serverInput" placeholder="wss://bifrost.exemple.fr">
+          </label>
+          <button type="submit">Appliquer</button>
+        </form>
+        <p id="serverError" class="error" role="alert" hidden></p>
+        <h3>Serveur sur cet ordinateur</h3>
+        <p class="muted">Pas de serveur à vous ? Cet ordinateur peut faire office de relais Bifrost pour votre réseau. Les autres appareils utilisent l'adresse affichée ci-dessous. Les échanges restent chiffrés de bout en bout ; sur Internet, passez par une redirection de port et un proxy HTTPS.</p>
+        <form id="relayForm" class="row" autocomplete="off">
+          <label class="check grow"><input id="relayEnabled" type="checkbox"> Faire fonctionner le serveur sur cet ordinateur</label>
+          <label class="field">Port <input id="relayPort" type="number" min="1024" max="65535" value="7780"></label>
+          <button type="submit">Appliquer</button>
+        </form>
+        <p id="relayError" class="error" role="alert" hidden></p>
+        <ul id="relayAddresses" class="list"></ul>
+
+        <label class="field">Votre nom (montré aux personnes que vous contrôlez)
+          <input id="nameInput" maxlength="40">
+        </label>
+        <label class="check"><input id="autostart" type="checkbox"> Démarrer Bifrost avec Windows</label>
+        <label class="check"><input id="tray" type="checkbox"> Rester dans la zone de notification quand je ferme la fenêtre</label>
+        <button id="quit" type="button" class="ghost">Quitter Bifrost (ce PC ne sera plus joignable)</button>
+      </div>
+    </details>
+    <span class="muted">Serveur : <code id="serverUrl"></code> · version <span id="version"></span></span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

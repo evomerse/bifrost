@@ -1,0 +1,45 @@
+name: Release
+
+# Declenchee en poussant un tag, par exemple :  git tag v0.2.0 && git push origin v0.2.0
+# Construit le paquet Windows (dist/Bifrost-win32-x64) et le joint a une release GitHub.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run dist
+
+      - name: Zip
+        shell: pwsh
+        run: |
+          $name = "Bifrost-${{ github.ref_name }}-win32-x64.zip"
+          Compress-Archive -Path dist/Bifrost-win32-x64 -DestinationPath $name
+          "ASSET=$name" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" $env:ASSET `
+            --title "Bifrost ${{ github.ref_name }}" `
+            --generate-notes

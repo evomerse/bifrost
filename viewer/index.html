@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bifrost</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main id="connect" class="card">
+    <h1>Bifrost</h1>
+    <p class="muted">Prise en main à distance. Saisissez l’identifiant affiché par l’agent sur l’autre ordinateur.</p>
+
+    <form id="form" autocomplete="off">
+      <label>Identifiant
+        <input id="id" inputmode="numeric" placeholder="123 456 789" maxlength="11" required autofocus>
+      </label>
+      <label>Mot de passe <span class="muted">(accès sans surveillance, facultatif)</span>
+        <input id="password" type="password" autocomplete="off">
+      </label>
+      <label>Votre nom <span class="muted">(montré à la personne en face)</span>
+        <input id="label" maxlength="40" placeholder="Nathan">
+      </label>
+      <fieldset>
+        <label class="inline"><input type="radio" name="mode" value="control" checked> Prendre le contrôle</label>
+        <label class="inline"><input type="radio" name="mode" value="view"> Voir seulement</label>
+      </fieldset>
+      <button id="go" type="submit">Se connecter</button>
+    </form>
+    <p id="status" role="status" class="status"></p>
+    <button id="closeWin" type="button" hidden>Fermer cette fenêtre</button>
+  </main>
+
+  <section id="stage" hidden>
+    <div id="bar">
+      <span id="barStatus">Connecté</span>
+      <span class="spacer"></span>
+      <select id="monitorSel" aria-label="Écran distant affiché" title="Écran distant affiché" hidden></select>
+      <button id="clipPending" type="button" hidden>Copier le presse-papiers distant</button>
+      <button id="clipBtn" type="button" aria-pressed="true" hidden>Presse-papiers : synchronisé</button>
+      <button id="filesBtn" type="button" aria-expanded="false" hidden>Fichiers</button>
+      <button id="fs" type="button">Plein écran</button>
+      <button id="stop" type="button">Déconnecter</button>
+    </div>
+    <canvas id="screen" tabindex="0"></canvas>
+
+    <aside id="files" hidden aria-label="Transfert de fichiers">
+      <header>
+        <strong>Fichiers</strong>
+        <button id="filesClose" type="button" aria-label="Fermer le panneau">×</button>
+      </header>
+      <nav id="crumb" aria-label="Dossier courant"></nav>
+      <label id="uploadLabel" class="button">
+        Envoyer vers l’ordinateur distant
+        <input id="upload" type="file" multiple hidden>
+      </label>
+      <p id="filesHint" class="muted">Vous pouvez aussi glisser des fichiers sur l’écran.</p>
+      <ul id="entries"></ul>
+      <h3>Transferts</h3>
+      <ul id="transferList"></ul>
+    </aside>
+    <div id="dropHint" hidden>Déposez les fichiers pour les envoyer</div>
+  </section>
+
+  <script type="module" src="/viewer.js"></script>
+</body>
+</html>

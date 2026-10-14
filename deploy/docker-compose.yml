@@ -1,0 +1,38 @@
+# Serveur Bifrost sur CasaOS / Docker, derriere un tunnel Cloudflare existant.
+#
+# Sur le NAS :
+#   git clone https://github.com/<compte>/bifrost.git /DATA/AppData/bifrost-src
+#   sudo mkdir -p /DATA/AppData/bifrost/data && sudo chown 1000:1000 /DATA/AppData/bifrost/data
+#   cd /DATA/AppData/bifrost-src/deploy && sudo docker compose up -d --build
+#
+# Mise a jour :
+#   cd /DATA/AppData/bifrost-src && git pull && cd deploy && sudo docker compose up -d --build
+#
+# Donnees persistantes : /DATA/AppData/bifrost/data/ids.json (hors du depot : a sauvegarder).
+#
+# Le port 7780 n'est publie que sur 127.0.0.1 du NAS : seul un processus de la machine
+# (cloudflared installe sur l'hote, ou `tailscale serve --bg 7780`) peut l'atteindre.
+# Dans Cloudflare : route publiee -> Service HTTP -> localhost:7780.
+# Aucun port n'est ouvert sur la box.
+services:
+  bifrost:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: bifrost-server:local
+    container_name: bifrost
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7780:7780"
+    environment:
+      HOST: "0.0.0.0"   # dans le conteneur uniquement
+      PORT: "7780"
+      DATA_DIR: "/data"
+      TRUST_PROXY: "1"  # lit l'IP reelle dans X-Forwarded-For (cloudflared devant)
+    volumes:
+      - /DATA/AppData/bifrost/data:/data
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

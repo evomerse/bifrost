@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Demande de connexion</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body class="dialog">
+  <main class="card dialogcard">
+    <h2>Demande de connexion</h2>
+    <pre id="text" class="request"></pre>
+    <div class="timer"><div id="bar"></div></div>
+    <p class="muted">Sans réponse, la demande sera refusée.</p>
+    <div class="row buttons">
+      <button id="deny" type="button" class="primary">Refuser</button>
+      <button id="allow" type="button">Autoriser</button>
+    </div>
+  </main>
+  <script src="consent.js"></script>
+</body>
+</html>
