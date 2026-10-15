@@ -65,7 +65,9 @@ export function createExtras($) {
   function renderClipButton() {
     el.clipBtn.hidden = !perms.clipboard;
     el.clipBtn.setAttribute('aria-pressed', String(clipSync));
-    el.clipBtn.textContent = clipSync ? 'Presse-papiers : synchronisé' : 'Presse-papiers : désactivé';
+    const label = clipSync ? 'Presse-papiers : synchronisé' : 'Presse-papiers : désactivé';
+    el.clipBtn.title = label;
+    el.clipBtn.setAttribute('aria-label', label);
   }
 
   el.clipBtn.addEventListener('click', () => {

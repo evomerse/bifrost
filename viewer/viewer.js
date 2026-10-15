@@ -65,8 +65,18 @@ function setStatus(text, isError = false) {
 function showStage(on) {
   $('connect').hidden = on;
   $('stage').hidden = !on;
+  if (on) showBar(true); // every session starts with the toolbar visible
   if (on) canvas.focus();
 }
+
+/** The toolbar can be folded away (full screen use); a small tab at the top brings it back. */
+function showBar(on) {
+  $('stage').classList.toggle('bar-hidden', !on);
+  $('barShow').hidden = on;
+  if (document.activeElement && document.activeElement !== canvas) canvas.focus();
+}
+$('barHide').addEventListener('click', () => showBar(false));
+$('barShow').addEventListener('click', () => showBar(true));
 
 /** Plaintext: only the handshake and server-level control (leave). */
 function sendPlain(msg) {
@@ -258,8 +268,8 @@ async function onSecure(packet) {
     case 'accepted':
       active = true;
       mode = msg.mode === 'control' ? 'control' : 'view';
-      $('barStatus').textContent =
-        (mode === 'control' ? 'Contrôle à distance' : 'Lecture seule') + (e2e.usedPassword ? '' : ` · code ${spaced(e2e.sas)}`);
+      $('barStatus').textContent = mode === 'control' ? 'Contrôle à distance' : 'Lecture seule';
+      $('barDetail').textContent = e2e.usedPassword ? '' : `Code ${spaced(e2e.sas)}`;
       $('beacon').hidden = true;
       canvas.classList.toggle('remote-pointer', mode === 'control');
       showStage(true);

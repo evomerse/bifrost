@@ -30,7 +30,7 @@ npm run desktop                   # ou : lancer directement depuis les sources
 
 Ce qui se passe quand quelqu'un se connecte à vous :
 - une **fenêtre d'accord** s'ouvre au premier plan, avec le nom indiqué (non vérifié), l'adresse et le **code de vérification** à comparer ; « Refuser » est le bouton par défaut, fermer la fenêtre ou ne rien faire pendant 30 s refuse ;
-- tant que la session dure, un **bandeau rouge** reste au-dessus de tout, avec un bouton « Arrêter » (la fenêtre principale a aussi « Arrêter la session ») ;
+- tant que la session dure, un **bandeau** (pastille rouge, qui regarde, bouton rouge « Arrêter ») reste au-dessus de tout (la fenêtre principale a aussi « Arrêter la session ») ;
 - avec un mot de passe défini, la personne qui le connaît entre sans accord (sauf si vous cochez « Toujours demander mon accord »).
 
 **Serveur** : l'application a besoin d'un relais Bifrost. Deux façons :
@@ -188,7 +188,7 @@ Ce que fait l'installation, sans rien cacher :
 - reprend votre identifiant, votre serveur et votre mot de passe dans `C:\ProgramData\Bifrost\agent.json`, illisible par les utilisateurs normaux ; un dossier ou fichier de données préexistant créé par un non-administrateur est supprimé, jamais adopté ;
 - crée le service **BifrostAgent** (visible dans `services.msc`, redémarrage automatique en cas de plantage) et le démarre.
 
-Le bandeau rouge « écran partagé » s'affiche toujours sur le bureau de la personne présente. Avant l'ouverture de session il n'y a personne pour le voir, c'est pourquoi **le mot de passe est indispensable** pour le service : sans lui, aucune connexion ne peut être acceptée à ce moment-là (l'accord expire et est refusé).
+Le bandeau « écran partagé » s'affiche toujours sur le bureau de la personne présente. Avant l'ouverture de session il n'y a personne pour le voir, c'est pourquoi **le mot de passe est indispensable** pour le service : sans lui, aucune connexion ne peut être acceptée à ce moment-là (l'accord expire et est refusé).
 
 Les journaux sont dans `C:\ProgramData\Bifrost` (`service.log`, `agent.log`, rotation automatique). N'exécutez pas en même temps l'agent « manuel » et le service avec le même identifiant : ils se déconnecteraient mutuellement.
 
@@ -233,7 +233,7 @@ Poignée de main en JSON clair (rien de secret n'y circule), puis **tout est chi
 ## Sécurité : ce qui est en place
 
 - Fenêtre d'accord par défaut, avec adresse du demandeur ; le nom indiqué est marqué « non vérifié » et nettoyé (caractères de contrôle et bidi retirés).
-- **Bandeau rouge « écran partagé » + bouton Arrêter** toujours visible pendant une session. Il n'y a volontairement pas de mode invisible.
+- **Bandeau « écran partagé » (pastille rouge) + bouton Arrêter** toujours visible pendant une session. Il n'y a volontairement pas de mode invisible.
 - Mot de passe : seule une clé dérivée est stockée ; 5 échecs ⇒ blocage 5 min de la voie mot de passe (la voie « accord » reste ouverte).
 - Un identifiant est lié au secret de son hôte (premier arrivé) : impossible de le reprendre avec un autre secret.
 - Le serveur ne sert qu'une liste fixe de fichiers, avec CSP stricte ; limite de tentatives de connexion par IP.

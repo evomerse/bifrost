@@ -238,7 +238,7 @@ const webPreferences = (preload) => ({
 });
 
 const consentRequests = new Map(); // webContents id -> { title, text, timeoutMs, answer }
-const indicatorData = new Map(); // webContents id -> { text, stopLabel, stop }
+const indicatorData = new Map(); // webContents id -> { text, stopLabel, peer, name, mode, stop }
 const viewerParams = new Map(); // webContents id -> { serverUrl, params }
 
 /** The "someone wants to connect" dialog. Resolves true only on an explicit "Allow". */
@@ -291,12 +291,12 @@ function openConsent({ title, text, timeoutMs = 30_000 }) {
 }
 
 /** The always-visible "your screen is shared" banner with a Stop button. */
-function openIndicator({ text, stopLabel, onStop }) {
+function openIndicator({ text, stopLabel, onStop, peer = '', name = '', mode = 'control' }) {
   const area = screen.getPrimaryDisplay().workArea;
-  const width = 580;
+  const width = 440;
   const win = new BrowserWindow({
     width,
-    height: 46,
+    height: 58,
     x: Math.round(area.x + (area.width - width) / 2),
     y: area.y,
     frame: false,
@@ -307,13 +307,15 @@ function openIndicator({ text, stopLabel, onStop }) {
     skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
-    backgroundColor: '#b02020',
+    transparent: true,
+    hasShadow: false,
+    backgroundColor: '#00000000',
     webPreferences: webPreferences('preload.cjs'),
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.__bifrostUi = false;
   const id = win.webContents.id;
-  indicatorData.set(id, { text, stopLabel, stop: onStop });
+  indicatorData.set(id, { text, stopLabel, peer, name, mode, stop: onStop });
   win.on('closed', () => indicatorData.delete(id));
   win.once('ready-to-show', () => win.showInactive());
   win.loadURL('bifrost://ui/indicator.html');
@@ -724,7 +726,7 @@ function registerIpc() {
   ipcMain.on('consent:answer', (e, yes) => consentRequests.get(e.sender.id)?.answer(yes === true));
   ipcMain.handle('indicator:init', (e) => {
     const r = indicatorData.get(e.sender.id);
-    return r ? { text: r.text, stopLabel: r.stopLabel } : null;
+    return r ? { text: r.text, stopLabel: r.stopLabel, peer: r.peer, name: r.name, mode: r.mode } : null;
   });
   ipcMain.on('indicator:stop', (e) => indicatorData.get(e.sender.id)?.stop());
 

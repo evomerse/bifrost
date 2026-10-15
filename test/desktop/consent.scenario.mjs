@@ -94,10 +94,11 @@ export async function run(ctx) {
 
   const banner = await until(bannerWindow, 'banner window');
   const bannerText = await until(
-    () => banner.webContents.executeJavaScript(`document.getElementById('text').textContent`).then((t) => (t.includes('127.0.0.1') ? t : null)),
+    () => banner.webContents.executeJavaScript(`document.querySelector('.bannerbar').innerText`).then((t) => (t.includes('127.0.0.1') ? t : null)),
     'banner text',
   );
   check('banner_visible_with_origin', true, bannerText);
+  check('banner_names_the_visitor', bannerText.includes('Camille') && bannerText.includes('lecture seule'), bannerText);
   check('state_reports_active_session', ctx.state().session?.phase === 'active', ctx.state().session);
 
   // the person stops the session from the banner

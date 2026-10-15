@@ -44,18 +44,41 @@
   </main>
 
   <section id="stage" hidden>
-    <div id="bar">
-      <img src="/logo.png" alt="" width="26" height="26">
-      <span id="barStatus">Connecté</span>
+    <div id="bar" role="toolbar" aria-label="Session à distance">
+      <img src="/logo.png" alt="" width="28" height="28">
+      <div class="who">
+        <strong id="barStatus">Connecté</strong>
+        <small id="barDetail"></small>
+      </div>
       <span class="spacer"></span>
       <select id="monitorSel" aria-label="Écran distant affiché" title="Écran distant affiché" hidden></select>
-      <button id="clipPending" type="button" hidden>Copier le presse-papiers distant</button>
-      <button id="clipBtn" type="button" aria-pressed="true" hidden>Presse-papiers : synchronisé</button>
-      <button id="talkBtn" type="button" aria-expanded="false" aria-controls="talkPanel" hidden>Discussion <span id="talkBadge" class="badge" hidden></span></button>
-      <button id="filesBtn" type="button" aria-expanded="false" hidden>Fichiers</button>
-      <button id="fs" type="button">Plein écran</button>
-      <button id="stop" type="button" class="danger">Déconnecter</button>
+      <button id="clipPending" type="button" class="pill" hidden>Copier le presse-papiers distant</button>
+      <div class="tools">
+        <button id="clipBtn" type="button" class="tool" aria-pressed="true" title="Presse-papiers : synchronisé" aria-label="Presse-papiers : synchronisé" hidden>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+        </button>
+        <button id="talkBtn" type="button" class="tool" aria-expanded="false" aria-controls="talkPanel" title="Discussion" aria-label="Discussion" hidden>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span id="talkBadge" class="badge" hidden></span>
+        </button>
+        <button id="filesBtn" type="button" class="tool" aria-expanded="false" title="Fichiers" aria-label="Fichiers" hidden>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button id="fs" type="button" class="tool" title="Plein écran" aria-label="Plein écran">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+      </div>
+      <button id="stop" type="button" class="danger" title="Terminer la session">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+        <span>Déconnecter</span>
+      </button>
+      <button id="barHide" type="button" class="tool" title="Masquer la barre" aria-label="Masquer la barre">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
+      </button>
     </div>
+    <button id="barShow" type="button" title="Afficher la barre" aria-label="Afficher la barre" hidden>
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
     <canvas id="screen" tabindex="0"></canvas>
 
     <aside id="files" hidden aria-label="Transfert de fichiers">

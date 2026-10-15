@@ -457,17 +457,19 @@ Ces deux systèmes n'ont pas pu être essayés pendant le développement (voir l
 
 ### 5.4 Pendant la session
 
-Sur le poste **contrôleur**, la barre en haut propose :
+Sur le poste **contrôleur**, la barre en haut indique le mode (et le code de vérification) à gauche, et propose à droite des boutons à icônes (le nom s'affiche en survolant) :
 
 | Élément | Rôle |
 |---|---|
 | Liste **Écran n** | Visible s'il y a plusieurs écrans : choisit l'écran affiché. |
-| **Presse-papiers** | Active ou coupe la synchronisation du texte (mode contrôle). |
-| **Fichiers** | Panneau d'envoi/téléchargement (mode contrôle) ; on peut aussi glisser des fichiers sur l'écran. |
-| **Plein écran** | Affiche l'écran distant en plein écran. |
+| Icône **Presse-papiers** | Active ou coupe la synchronisation du texte (mode contrôle) ; barrée quand c'est coupé. |
+| Icône **Discussion** | Ouvre la discussion avec la personne en face (pastille = messages non lus). |
+| Icône **Fichiers** | Panneau d'envoi/téléchargement (mode contrôle) ; on peut aussi glisser des fichiers sur l'écran. |
+| Icône **Plein écran** | Affiche l'écran distant en plein écran. |
 | **Déconnecter** | Termine la session. |
+| Flèche **˄** | Masque la barre (une petite languette en haut au centre la ramène). |
 
-Sur le poste **contrôlé**, un **bandeau rouge « Votre écran est partagé »** reste visible en permanence avec un bouton **Arrêter**. Il n'existe volontairement pas de mode invisible. La personne devant le poste peut aussi cliquer sur **« Arrêter la session »** dans la fenêtre Bifrost, à tout moment.
+Sur le poste **contrôlé**, un **bandeau « Votre écran est partagé »** (pastille rouge clignotante, nom et adresse de la personne connectée) reste visible en permanence au-dessus de tout avec un bouton rouge **Arrêter**. Il n'existe volontairement pas de mode invisible. La personne devant le poste peut aussi cliquer sur **« Arrêter la session »** dans la fenêtre Bifrost, à tout moment.
 
 ### 5.5 Terminer
 

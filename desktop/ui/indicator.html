@@ -6,8 +6,12 @@
   <link rel="stylesheet" href="app.css">
 </head>
 <body class="bannerbody">
-  <div class="bannerbar">
-    <span id="text">Votre écran est partagé</span>
+  <div class="bannerbar" role="status">
+    <span class="rec" aria-hidden="true"></span>
+    <div class="who">
+      <strong id="text">Votre écran est partagé</strong>
+      <small id="detail"></small>
+    </div>
     <button id="stop" type="button">Arrêter</button>
   </div>
   <script src="indicator.js"></script>

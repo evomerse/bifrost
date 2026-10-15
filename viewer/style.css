@@ -74,16 +74,40 @@ button:disabled { opacity: 0.55; cursor: default; }
 @media (prefers-reduced-motion: reduce) { .beacon span { animation: none; width: 100%; } }
 
 /* --- remote screen ------------------------------------------------------------------------ */
-#stage { position: fixed; inset: 0; display: flex; flex-direction: column; background: #000; }
+#stage { --bar-h: 48px; position: fixed; inset: 0; display: flex; flex-direction: column; background: #000; }
+/* The toolbar floats over the remote desktop, so it stays dark whatever the page theme is. */
 #bar {
-  display: flex; gap: 8px; align-items: center; padding: 5px 10px;
-  background: var(--panel); border-bottom: 1px solid var(--line);
+  flex: none; height: var(--bar-h); display: flex; gap: 10px; align-items: center; padding: 0 10px 0 12px;
+  background: #1c1f24; color: #e8eaed; border-bottom: 1px solid #000;
 }
-#barStatus { font-weight: 600; font-size: 0.9rem; }
-#bar button { min-height: 34px; padding: 5px 12px; }
-#bar button:not(.danger) { background: transparent; color: var(--text); border-color: var(--line); }
-#bar button:not(.danger):hover { background: var(--field); border-color: var(--accent); }
+#bar img { flex: none; padding: 2px; border-radius: 8px; background: #e8eaed; }
+#bar .who { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+#barStatus { font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
+#barDetail { color: #9aa1ab; font-size: 0.78rem; white-space: nowrap; letter-spacing: 0.02em; }
+#barDetail:empty { display: none; }
+.tools { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); }
+#bar button { min-height: 34px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; position: relative; }
+#bar button.tool { width: 36px; padding: 0; background: transparent; color: #cfd3d9; border-color: transparent; border-radius: 8px; }
+#bar button.tool:hover { background: rgba(255, 255, 255, 0.12); color: #fff; border-color: transparent; }
+#bar button.tool[aria-expanded="true"], #bar button.tool[aria-pressed="true"] { color: #8db4ff; }
+#bar button.tool[aria-pressed="false"] { color: #7c828c; opacity: 1; }
+#bar button.tool[aria-pressed="false"]::after {
+  content: ''; position: absolute; width: 22px; height: 2px; background: #ff6b6b; border-radius: 2px; transform: rotate(-45deg);
+}
+#bar button.danger { background: #d93a3a; border-color: #d93a3a; color: #fff; }
+#bar button.danger:hover:not(:disabled) { background: #ec4d4d; border-color: #ec4d4d; color: #fff; }
+.ico { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#bar button.pill { background: #d93a3a; border-color: #d93a3a; color: #fff; font-size: 0.85rem; border-radius: 17px; }
 .spacer { flex: 1; }
+/* "hide the toolbar": a small tab at the top centre brings it back */
+#stage.bar-hidden #bar { display: none; }
+#barShow {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 4;
+  width: 56px; min-height: 22px; padding: 0; display: grid; place-items: center;
+  background: #1c1f24; color: #cfd3d9; border: 0; border-radius: 0 0 10px 10px; opacity: 0.85;
+}
+#barShow:hover:not(:disabled) { background: #2b3038; color: #fff; opacity: 1; }
+#barShow .ico { width: 16px; height: 16px; }
 #screen { flex: 1; min-height: 0; width: 100%; object-fit: contain; cursor: default; }
 /* While controlling, the host's own pointer is already drawn into the video: hide the local one
    so there is a single pointer, never two. */
@@ -91,7 +115,7 @@ button:disabled { opacity: 0.55; cursor: default; }
 
 /* --- clipboard + files -------------------------------------------------------------------- */
 #files {
-  position: absolute; top: 44px; right: 0; bottom: 0; width: min(380px, 100%);
+  position: absolute; top: var(--bar-h); right: 0; bottom: 0; width: min(380px, 100%);
   padding: 12px 14px; overflow: auto;
   background: var(--panel); color: var(--text); border-left: 1px solid var(--line);
   display: flex; flex-direction: column; gap: 10px;
@@ -118,21 +142,22 @@ button:disabled { opacity: 0.55; cursor: default; }
 }
 .button:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 #dropHint {
-  position: absolute; inset: 44px 0 0 0; display: grid; place-items: center;
+  position: absolute; inset: var(--bar-h) 0 0 0; display: grid; place-items: center;
   background: rgba(20, 40, 90, 0.75); color: #fff; font-size: 1.3rem; font-weight: 600; pointer-events: none;
 }
-#clipPending { background: var(--danger); color: #fff; border-color: var(--danger); }
 #monitorSel {
-  font: inherit; min-height: 34px; padding: 4px 8px; color: var(--text); background: var(--field);
-  border: 1px solid var(--line); border-radius: 8px;
+  font: inherit; font-size: 0.85rem; min-height: 34px; padding: 4px 8px; color: #e8eaed; background: rgba(255, 255, 255, 0.06);
+  border: 1px solid transparent; border-radius: 8px; max-width: 260px;
 }
-#bar button[aria-pressed="false"] { opacity: 0.65; }
+#monitorSel:hover { background: rgba(255, 255, 255, 0.12); }
+#monitorSel option { color: #1c1f24; background: #fff; }
 
 /* --- chat --------------------------------------------------------------------------------- */
 .badge {
-  display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px;
+  display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px;
   background: var(--danger); color: #fff; font-size: 0.72rem; line-height: 18px; text-align: center;
 }
+#bar .badge { position: absolute; top: 0; right: 0; transform: translate(25%, -15%); }
 #talkPanel {
   position: absolute; right: 16px; bottom: 16px; z-index: 3;
   width: min(340px, calc(100% - 32px)); height: min(440px, calc(100% - 80px));
@@ -157,3 +182,9 @@ button:disabled { opacity: 0.55; cursor: default; }
 
 /* author display rules must not defeat the hidden attribute */
 [hidden] { display: none !important; }
+
+@media (max-width: 760px) {
+  #bar #stop span, #barDetail { display: none; }
+  #bar button.danger { padding: 0 9px; }
+  #monitorSel { max-width: 120px; }
+}
