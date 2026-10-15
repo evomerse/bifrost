@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { buildCaptureExe, cscPath, waitUntilUsable } from '../agent/native-build.js';
-import { RecordParser, parseMonitorReport } from '../agent/helpers.js';
+import { RecordParser, parseCaptureStatus, parseMonitorReport } from '../agent/helpers.js';
 import { codecStringFromAnnexB } from '../shared/e2e.js';
 
 const skip = process.platform !== 'win32' || !cscPath();
@@ -40,7 +40,7 @@ function nalTypes(buf) {
 function capture(args, { done, timeoutMs = 25_000, onStart, onMonitors, onFrameSeen } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(build(), args, { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-    const out = { status: null, frames: [], stderr: '' };
+    const out = { status: null, frames: [], stderr: '', notes: [] };
     let finished = false;
     const finish = (err) => {
       if (finished) return;
@@ -59,8 +59,11 @@ function capture(args, { done, timeoutMs = 25_000, onStart, onMonitors, onFrameS
     child.on('exit', (code) => finish(out.frames.length ? null : new Error(`exited ${code}: ${out.stderr}`)));
     const parser = new RecordParser({
       onStatus: (s) => {
-        out.status = s;
-        onStart?.(child);
+        // 'h264' | 'jpeg' is the codec; the others (secure, pointer...) are notes that may follow it
+        if (parseCaptureStatus(s)?.codec) {
+          out.status = s;
+          onStart?.(child);
+        } else out.notes.push(s);
       },
       onFrame: (f) => {
         out.frames.push({ ...f, data: Buffer.from(f.data), at: Date.now() });
@@ -266,4 +269,22 @@ test('record parser reassembles records split across chunks', () => {
     ['jpeg', true, 800, 600],
   ]);
   assert.throws(() => new RecordParser({}).push(Buffer.from([2, 0, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff])));
+});
+
+test('capture status lines: codec, secure desktop, pointer, errors', () => {
+  assert.deepEqual(parseCaptureStatus('h264'), { codec: 'h264' });
+  assert.deepEqual(parseCaptureStatus('jpeg'), { codec: 'jpeg' });
+  assert.deepEqual(parseCaptureStatus('secure'), { secure: true });
+  assert.deepEqual(parseCaptureStatus('secure-off'), { secure: false });
+  assert.deepEqual(parseCaptureStatus('pointer'), { pointer: true });
+  assert.deepEqual(parseCaptureStatus('pointer-off'), { pointer: false });
+  assert.deepEqual(parseCaptureStatus('error: boom'), { error: 'error: boom' });
+  assert.equal(parseCaptureStatus('whatever'), null);
+  assert.equal(parseCaptureStatus(undefined), null);
+});
+
+test('the helper tells whether the pointer is in the picture and never claims a secure desktop on a normal one', { skip, timeout: 60_000 }, async () => {
+  const out = await capture(['--codec', 'jpeg', '--fps', '10'], { done: (o) => o.frames.length >= 3 && o.notes.length >= 1 });
+  assert.ok(out.notes.some((n) => n === 'pointer' || n === 'pointer-off'), `pointer state reported (got ${out.notes})`);
+  assert.equal(out.notes.includes('secure'), false, 'an ordinary unlocked desktop is not a secure desktop');
 });

@@ -192,6 +192,10 @@ Ce que fait l'installation, sans rien cacher :
 
 Le bandeau « écran partagé » s'affiche toujours sur le bureau de la personne présente. Avant l'ouverture de session il n'y a personne pour le voir, c'est pourquoi **le mot de passe est indispensable** pour le service : sans lui, aucune connexion ne peut être acceptée à ce moment-là (l'accord expire et est refusé).
 
+**Application de bureau et écran de verrouillage** : l'application tourne dans la session de l'utilisateur ; quand le PC est verrouillé (Win+L) ou qu'une demande d'administrateur (UAC) s'affiche, Windows interdit à un programme de la session de voir ou de piloter ce bureau sécurisé. La visionneuse affiche alors une note explicative au lieu d'une image figée. Pendant une session, l'application empêche l'écran de s'éteindre et l'économiseur d'écran de se lancer (donc le verrouillage par inactivité) ; elle ne peut pas empêcher un verrouillage volontaire ni une stratégie d'entreprise. Pour saisir un mot de passe Windows à distance, c'est le service ci-dessus qu'il faut (il tourne en SYSTEM et suit le bureau actif) ; il n'a volontairement pas de passerelle vers l'application : un tel pont permettrait à n'importe quel programme de l'utilisateur de valider une demande UAC.
+
+**Pointeur** : pendant le contrôle, le pointeur de l'ordinateur distant est dessiné dans la vidéo et le vôtre est masqué. Quand Windows cache celui de l'hôte (par exemple pendant la frappe), la visionneuse affiche un petit anneau à la position envoyée, pour qu'il ne disparaisse jamais.
+
 Les journaux sont dans `C:\ProgramData\Bifrost` (`service.log`, `agent.log`, rotation automatique). N'exécutez pas en même temps l'agent « manuel » et le service avec le même identifiant : ils se déconnecteraient mutuellement.
 
 ### À vérifier chez vous après l'installation

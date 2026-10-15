@@ -60,7 +60,12 @@ export async function run(ctx) {
   await until(async () => (await page("document.getElementById('stage') && !document.getElementById('stage').hidden")), 'viewer stage shown');
   check('session_accepted_with_password', true);
   // while controlling, only the host's own pointer is seen
-  check('local_pointer_hidden_while_controlling', await page(`getComputedStyle(document.getElementById('screen')).cursor === 'none'`));
+  // one pointer only: the host's own (drawn in the video) when it is there, else a small local ring
+  const cursor = await until(
+    () => page(`getComputedStyle(document.getElementById('screen')).cursor`).then((c) => (c === 'none' || c.startsWith('url(') ? c : null)),
+    'pointer style',
+  );
+  check('single_pointer_while_controlling', cursor === 'none' || cursor.startsWith('url('), cursor.slice(0, 40));
   check('password_not_kept', ctx.viewerParams.get(win.webContents.id)?.params.password === '');
 
   // 3. H.264 frames decoded by WebCodecs into the canvas

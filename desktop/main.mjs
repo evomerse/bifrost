@@ -7,7 +7,7 @@
 //
 // The host logic is agent/host.js, shared with the command-line agent and the Windows service.
 
-import electron, { app, BrowserWindow, Menu, Notification, Tray, clipboard, desktopCapturer, dialog, ipcMain, nativeImage, protocol, safeStorage, screen, session, shell } from 'electron';
+import electron, { app, BrowserWindow, Menu, Notification, Tray, clipboard, desktopCapturer, dialog, ipcMain, nativeImage, powerSaveBlocker, protocol, safeStorage, screen, session, shell } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -360,9 +360,13 @@ function openIndicator({ text, stopLabel, onStop, peer = '', name = '', mode = '
     setOpen,
   };
   data.setOpen = setOpen;
+  // While someone works on this PC the display stays on: no screen saver, no sleep, hence no
+  // lock by inactivity in the middle of the session (the person cannot be asked to unlock).
+  const awake = powerSaveBlocker.start('prevent-display-sleep');
   win.on('closed', () => {
     boxData.delete(id);
     if (sessionBox?.win === win) sessionBox = null;
+    if (powerSaveBlocker.isStarted(awake)) powerSaveBlocker.stop(awake);
   });
   win.once('ready-to-show', () => win.showInactive());
   win.loadURL('bifrost://ui/indicator.html');

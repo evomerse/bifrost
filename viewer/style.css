@@ -112,6 +112,16 @@ button:disabled { opacity: 0.55; cursor: default; }
 /* While controlling, the host's own pointer is already drawn into the video: hide the local one
    so there is a single pointer, never two. */
 #screen.remote-pointer { cursor: none; }
+/* The host hides its pointer (while typing...): a small ring, hot spot at its centre. */
+#screen.local-pointer {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ccircle cx='10' cy='10' r='6' fill='none' stroke='%23000' stroke-opacity='.75' stroke-width='3'/%3E%3Ccircle cx='10' cy='10' r='6' fill='none' stroke='%23fff' stroke-width='1.5'/%3E%3C/svg%3E") 10 10, crosshair;
+}
+#secureNote {
+  position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 3;
+  width: min(620px, calc(100% - 32px)); margin: 0; padding: 12px 16px; border-radius: 10px;
+  background: rgba(28, 31, 36, 0.94); color: #f2f3f5; border: 1px solid #b7791f; font-size: 0.9rem; line-height: 1.4;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
 
 /* --- clipboard + files -------------------------------------------------------------------- */
 #files {

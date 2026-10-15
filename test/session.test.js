@@ -876,3 +876,24 @@ test('assistant: nothing runs after the session ended', async () => {
   await tick();
   assert.deepEqual(tools.ran.map((r) => r[0]), ['slow'], 'the queued call is dropped with the session');
 });
+
+test('capture: the secure desktop and the pointer state reach the viewer, stale helpers are ignored', async () => {
+  const c = await connect({ config: { id: ID } });
+  await c.receive();
+  const { onSecure, onPointer } = c.events.captureOptions;
+  onSecure(true);
+  onPointer(false);
+  onPointer(true);
+  onSecure(false);
+  await waitFor(() => c.binary.length >= 3 + 4, 'four notes');
+  assert.deepEqual(await c.receive(), [
+    { t: 'secure', on: true },
+    { t: 'pointer', drawn: false },
+    { t: 'pointer', drawn: true },
+    { t: 'secure', on: false },
+  ]);
+  c.session.end('viewer-left');
+  onSecure(true); // a late report of the helper after the end: nothing is sent
+  await tick();
+  assert.equal((await c.receive()).length, 0);
+});

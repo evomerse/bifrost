@@ -21,6 +21,22 @@ function drain(child, log, name) {
   child.on('error', (err) => log(`[${name}] spawn error: ${err.message}`));
 }
 
+/**
+ * What a status line of the native capture helper means:
+ *   h264 | jpeg   the codec in use
+ *   secure[-off]  the logon / lock screen or a UAC prompt is (no longer) on screen and this process
+ *                 is not allowed to see it (only a SYSTEM process is)
+ *   pointer[-off] the host's pointer is (no longer) drawn into the picture
+ */
+export function parseCaptureStatus(text) {
+  const s = String(text ?? '').trim();
+  if (s === 'h264' || s === 'jpeg') return { codec: s };
+  if (s === 'secure' || s === 'secure-off') return { secure: s === 'secure' };
+  if (s === 'pointer' || s === 'pointer-off') return { pointer: s === 'pointer' };
+  if (s.startsWith('error')) return { error: s };
+  return null;
+}
+
 const RECORD_HEADER = 10;
 const MAX_MONITORS = 16;
 
@@ -92,7 +108,7 @@ export function createWindowsHelpers(log = () => {}) {
      * 0 = primary; only the native helper can capture another monitor.
      * Returns { stop, requestKeyframe, setBitrate, setMonitor, codec }.
      */
-    startCapture({ codec = 'h264', fps = 30, bitrate = 4_000_000, maxWidth = 1920, quality = 55, monitor = 0, onFrame, onMonitors, onExit }) {
+    startCapture({ codec = 'h264', fps = 30, bitrate = 4_000_000, maxWidth = 1920, quality = 55, monitor = 0, onFrame, onMonitors, onSecure, onPointer, onExit }) {
       let native = exe();
       let child = null;
       let actual = 'jpeg';
@@ -146,10 +162,21 @@ export function createWindowsHelpers(log = () => {}) {
         feed(
           c,
           new RecordParser({
-            onStatus: (s) => {
-              if (s === 'h264' || s === 'jpeg') actual = s;
-              log(`[capture] codec ${s}`);
-              if (s.startsWith('error')) c.kill();
+            onStatus: (text) => {
+              const s = parseCaptureStatus(text);
+              if (!s) return;
+              if (s.codec) {
+                actual = s.codec;
+                log(`[capture] codec ${s.codec}`);
+              } else if (s.secure !== undefined) {
+                log(`[capture] bureau securise ${s.secure ? 'affiche (non visible sans le service)' : 'ferme'}`);
+                onSecure?.(s.secure);
+              } else if (s.pointer !== undefined) {
+                onPointer?.(s.pointer);
+              } else if (s.error) {
+                log(`[capture] ${s.error}`);
+                c.kill();
+              }
             },
             onFrame,
             onMonitors,

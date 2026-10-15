@@ -274,7 +274,8 @@ async function onSecure(packet) {
       $('barStatus').textContent = mode === 'control' ? 'Contrôle à distance' : 'Lecture seule';
       $('barDetail').textContent = e2e.usedPassword ? '' : `Code ${spaced(e2e.sas)}`;
       $('beacon').hidden = true;
-      canvas.classList.toggle('remote-pointer', mode === 'control');
+      hostPointer = true; // as before, unless the host says its pointer is not in the picture
+      applyPointer();
       showStage(true);
       break;
     case 'denied':
@@ -285,6 +286,15 @@ async function onSecure(packet) {
       break;
     case 'monitors':
       showMonitors(msg);
+      break;
+    case 'secure':
+      // lock / logon screen or UAC prompt that the host's program may not display
+      $('secureNote').hidden = msg.on !== true;
+      break;
+    case 'pointer':
+      // the host's pointer is in the picture: hide ours; otherwise show our own small marker
+      hostPointer = msg.drawn === true;
+      applyPointer();
       break;
     default:
       if (assistant.onJson(msg)) break; // Heimdall's answers from the host (and its permission)
@@ -346,7 +356,8 @@ function finish(text, isError = false) {
   monitorSel.hidden = true;
   monitorSel.replaceChildren();
   active = false;
-  canvas.classList.remove('remote-pointer');
+  canvas.classList.remove('remote-pointer', 'local-pointer');
+  $('secureNote').hidden = true;
   $('beacon').hidden = true;
   showStage(false);
   $('go').disabled = false;
@@ -548,6 +559,16 @@ const heldButtons = new Set();
 let moveQueued = null;
 
 const canInput = () => active && mode === 'control';
+
+// While controlling, the host's own pointer is drawn into the video: hide ours so there is one
+// pointer, not two. When the host hides it (Windows does while typing, some programs always), the
+// picture has none: show a small ring of ours at the position being sent, so it never vanishes.
+let hostPointer = true;
+function applyPointer() {
+  const control = active && mode === 'control';
+  canvas.classList.toggle('remote-pointer', control && hostPointer);
+  canvas.classList.toggle('local-pointer', control && !hostPointer);
+}
 
 function norm(e) {
   const r = canvas.getBoundingClientRect();

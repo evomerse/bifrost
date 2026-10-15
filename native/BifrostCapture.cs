@@ -110,6 +110,12 @@ namespace Bifrost
         private static IntPtr attached = IntPtr.Zero;
         private static string current = "";
 
+        /// <summary>
+        /// True while the input desktop cannot be opened: the logon / lock screen or a UAC prompt is
+        /// showing and this process is not SYSTEM, so it can neither see nor type into it.
+        /// </summary>
+        public static volatile bool InputDesktopDenied;
+
         private static string NameOf(IntPtr desktop)
         {
             int needed;
@@ -129,7 +135,12 @@ namespace Bifrost
         {
             IntPtr h = OpenInputDesktop(0, false, 0x10000000);
             if (h == IntPtr.Zero) h = OpenInputDesktop(0, false, 0x000001FF | 0x40000000);
-            if (h == IntPtr.Zero) return false;
+            if (h == IntPtr.Zero)
+            {
+                InputDesktopDenied = true;
+                return false;
+            }
+            InputDesktopDenied = false;
             string name = NameOf(h);
             if (name == current) { CloseDesktop(h); return false; }
             if (SetThreadDesktop(h))
@@ -260,6 +271,9 @@ namespace Bifrost
         /// <summary>The bitmap to encode after a successful Grab (scaled when needed).</summary>
         public Bitmap Current { get { return dstBmp != null ? dstBmp : srcBmp; } }
 
+        /// <summary>True when the last grab drew the host's pointer into the picture.</summary>
+        public bool CursorDrawn;
+
         public bool Grab()
         {
             Win.SyncDesktop();
@@ -274,6 +288,7 @@ namespace Bifrost
             {
                 return false; // desktop switch in progress
             }
+            bool drawn = false;
             try
             {
                 Win.CURSORINFO ci = new Win.CURSORINFO();
@@ -281,11 +296,14 @@ namespace Bifrost
                 if (Win.GetCursorInfo(ref ci) && (ci.flags & 1) != 0)
                 {
                     IntPtr hdc = srcG.GetHdc();
-                    try { Win.DrawIconEx(hdc, ci.ptScreenPos.x - srcX, ci.ptScreenPos.y - srcY, ci.hCursor, 0, 0, 0, IntPtr.Zero, 3); }
+                    try { drawn = Win.DrawIconEx(hdc, ci.ptScreenPos.x - srcX, ci.ptScreenPos.y - srcY, ci.hCursor, 0, 0, 0, IntPtr.Zero, 3); }
                     finally { srcG.ReleaseHdc(hdc); }
                 }
             }
             catch (Exception) { }
+            // Windows hides the pointer while typing (and some programs hide it): then nothing of it
+            // is in the picture, and the viewer has to show its own.
+            CursorDrawn = drawn;
             if (dstG != null) dstG.DrawImage(srcBmp, 0, 0, Width, Height);
             return true;
         }
@@ -462,11 +480,30 @@ namespace Bifrost
             bool needKey = true;
             int idleFrames = 0;
             int generation = grabber.Generation;
+            int denied = 0;
+            bool secureSent = false;
+            bool? pointerSent = null;
 
             for (;;)
             {
                 sw.Restart();
-                if (!grabber.Grab()) { Thread.Sleep(100); continue; }
+                bool grabbed = grabber.Grab();
+
+                // Logon / lock screen or UAC while not SYSTEM: say so (a few grabs in a row, a desktop
+                // switch is not instantaneous) so that the viewer explains the frozen picture.
+                if (Win.InputDesktopDenied) denied++; else denied = 0;
+                bool secure = denied >= 5;
+                if (secure != secureSent)
+                {
+                    secureSent = secure;
+                    WriteStatus(secure ? "secure" : "secure-off");
+                }
+                if (grabbed && (!pointerSent.HasValue || pointerSent.Value != grabber.CursorDrawn))
+                {
+                    pointerSent = grabber.CursorDrawn;
+                    WriteStatus(pointerSent.Value ? "pointer" : "pointer-off");
+                }
+                if (!grabbed) { Thread.Sleep(100); continue; }
                 long tGrab = sw.ElapsedTicks;
 
                 // The viewer learns about the displays before the first frame, and again on change.
