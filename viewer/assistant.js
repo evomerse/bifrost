@@ -28,6 +28,7 @@ export function createAssistant($, desktop) {
 
   let io = null;
   let available = false;
+  let remote = 'old'; // 'on' | 'off' (the owner refuses it) | 'old' (this host does not know the assistant)
   let busy = false;
   const waiting = new Map(); // request id -> { resolve, timer }
 
@@ -46,6 +47,16 @@ export function createAssistant($, desktop) {
 
   async function refreshNote() {
     let note = '';
+    if (remote === 'old') {
+      note = 'Cet ordinateur distant n’a pas une version de Bifrost qui propose l’assistant : mettez-y la même version que la vôtre (Réglages, mises à jour). En attendant, c’est son propre Heimdall qu’on voit sur son écran.';
+    } else if (remote === 'off') {
+      note = 'Le propriétaire de cet ordinateur n’autorise pas l’assistant (Autorisations de son Bifrost).';
+    }
+    if (note) {
+      el.note.textContent = note;
+      el.note.hidden = false;
+      return;
+    }
     try {
       const st = await api.state();
       if (!st.enabled) note = 'Heimdall est désactivé sur votre Bifrost : activez-le dans les Réglages (fenêtre principale).';
@@ -168,6 +179,7 @@ export function createAssistant($, desktop) {
     start(handlers) {
       io = handlers;
       available = false;
+      remote = 'old';
       busy = false;
       clearLog();
       showError('');
@@ -198,8 +210,13 @@ export function createAssistant($, desktop) {
       if (msg.t === 'perm') {
         const platform = msg.assistant?.platform;
         available = ['win32', 'darwin', 'linux'].includes(platform);
-        el.button.hidden = !available;
+        remote = available ? 'on' : msg.assistant === false ? 'off' : 'old';
+        // always offered while controlling (desktop app): when it cannot work, the panel says why
+        el.button.hidden = io.isControl ? !io.isControl() : false;
+        el.input.disabled = !available;
+        el.send.disabled = !available || busy;
         if (available) api.setRemote({ platform }).catch(() => {});
+        if (!el.panel.hidden) refreshNote();
         return false;
       }
       if (msg.t === 'hd-result') {

@@ -187,7 +187,7 @@ function start(id) {
   mode = form.elements.mode.value === 'view' ? 'view' : 'control';
   e2e = new ViewerE2E({ id, password: $('password').value });
   chat.start({ sendJson: sendSecure });
-  assistant.start({ sendJson: sendSecure });
+  assistant.start({ sendJson: sendSecure, isControl: () => mode === 'control' });
   extras.start({
     sendJson: sendSecure,
     sendChunk: (tid, last, bytes) => sendSecureKind(KIND_FILE, packFileBody(tid, last, bytes)),

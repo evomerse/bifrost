@@ -828,7 +828,9 @@ test('assistant: view-only sessions, a refusing owner and hosts without tools ge
   ]) {
     const c = await connect({ config: { id: ID }, consent: true, ...opts });
     const msgs = await c.receive();
-    assert.equal(msgs.find((m) => m.t === 'perm').assistant, undefined, name);
+    // owner refusal is said explicitly (false); no tools in this host, or view-only: nothing at all
+    const refusing = ['owner said no', 'default permissions'].includes(name);
+    assert.equal(msgs.find((m) => m.t === 'perm').assistant, refusing ? false : undefined, name);
     await c.input({ t: 'hd-run', id: 'x', name: 'system_info', args: {} });
     await tick();
     assert.equal(tools.ran.length, 0, `${name}: nothing was run`);
