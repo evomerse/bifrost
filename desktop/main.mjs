@@ -15,9 +15,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createWindowsHelpers } from '../agent/helpers.js';
 import { createPortableHelpers } from '../agent/helpers-portable.js';
 import { createElectronCapture } from './capture-electron.mjs';
-import { createHeimdall } from './heimdall/assistant.js';
+import { REMOTE_SYSTEM, createHeimdall } from './heimdall/assistant.js';
 import { EXTERNAL_LINKS, PROVIDERS, providerInfo } from './heimdall/providers.js';
 import { createSecretStore } from './heimdall/secrets.js';
+import { createTools } from './heimdall/tools.js';
 import { Updater } from './updater.mjs';
 import { startHost } from '../agent/host.js';
 import { buildPermissions } from '../agent/permissions.js';
@@ -85,7 +86,8 @@ let sessionInfo = null; // { ip, phase: 'incoming' | 'active' }
 // Chat with the person connected to this PC. Memory only, emptied whenever a session starts or
 // ends: nothing of a conversation survives its session.
 const MAX_CHAT_MESSAGES = 200;
-let chatMessages = []; // { from: 'me' | 'peer', text, name?, ts }
+let chatMessages = []; // { from: 'me' | 'peer' | 'system', text, name?, ts }
+let sessionBox = null; // the box shown at the bottom right while this PC is shared
 let mainWindow = null;
 let tray = null;
 let quitting = false;
@@ -117,6 +119,7 @@ function uiState() {
     hasPassword: Boolean(cfg.passwordKey),
     requireConsent: Boolean(cfg.requireConsent),
     clipboard: cfg.clipboard !== false,
+    assistant: cfg.assistant !== false,
     fileTransfer: ['ask', 'allow', 'deny'].includes(cfg.fileTransfer) ? cfg.fileTransfer : 'ask',
     shares: (cfg.shares ?? []).map((s) => ({ name: s.name, dir: s.dir, write: Boolean(s.write) })),
     name: settings.name,
@@ -238,8 +241,15 @@ const webPreferences = (preload) => ({
 });
 
 const consentRequests = new Map(); // webContents id -> { title, text, timeoutMs, answer }
-const indicatorData = new Map(); // webContents id -> { text, stopLabel, peer, name, mode, stop }
+const boxData = new Map(); // webContents id -> { text, stopLabel, peer, name, mode, stop, win, open }
 const viewerParams = new Map(); // webContents id -> { serverUrl, params }
+const viewerAssistants = new Map(); // viewer webContents id -> Heimdall working on that remote PC
+
+// The session box: folded it is a slim bar, unfolded it holds the conversation.
+const BOX_WIDTH = 360;
+const BOX_FOLDED = 66;
+const BOX_UNFOLDED = 470;
+const BOX_MARGIN = 16;
 
 /** The "someone wants to connect" dialog. Resolves true only on an explicit "Allow". */
 function openConsent({ title, text, timeoutMs = 30_000 }) {
@@ -290,18 +300,20 @@ function openConsent({ title, text, timeoutMs = 30_000 }) {
   };
 }
 
-/** The always-visible "your screen is shared" banner with a Stop button. */
+/**
+ * The session box, always on top at the bottom right of the shared screen (TeamViewer-like):
+ * who is connected, a Stop button and the conversation. Folded to a slim bar until someone writes.
+ */
 function openIndicator({ text, stopLabel, onStop, peer = '', name = '', mode = 'control' }) {
   const area = screen.getPrimaryDisplay().workArea;
-  const width = 440;
   const win = new BrowserWindow({
-    width,
-    height: 58,
-    x: Math.round(area.x + (area.width - width) / 2),
-    y: area.y,
+    width: BOX_WIDTH,
+    height: BOX_FOLDED,
+    x: area.x + area.width - BOX_WIDTH - BOX_MARGIN,
+    y: area.y + area.height - BOX_FOLDED - BOX_MARGIN,
     frame: false,
     resizable: false,
-    movable: false,
+    movable: true,
     minimizable: false,
     maximizable: false,
     skipTaskbar: true,
@@ -310,13 +322,48 @@ function openIndicator({ text, stopLabel, onStop, peer = '', name = '', mode = '
     transparent: true,
     hasShadow: false,
     backgroundColor: '#00000000',
-    webPreferences: webPreferences('preload.cjs'),
+    webPreferences: webPreferences('preload-box.cjs'),
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.__bifrostUi = false;
   const id = win.webContents.id;
-  indicatorData.set(id, { text, stopLabel, peer, name, mode, stop: onStop });
-  win.on('closed', () => indicatorData.delete(id));
+  const data = { text, stopLabel, peer, name, mode, stop: onStop, win, open: false };
+  boxData.set(id, data);
+
+  // Folds or unfolds the box, keeping its bottom edge where it is (it hangs from the corner).
+  const setOpen = (open) => {
+    if (win.isDestroyed() || data.open === open) return;
+    data.open = open;
+    const b = win.getBounds();
+    const height = open ? BOX_UNFOLDED : BOX_FOLDED;
+    const wa = screen.getDisplayMatching(b).workArea;
+    const y = Math.min(Math.max(wa.y, b.y + b.height - height), wa.y + wa.height - height);
+    win.setResizable(true); // not every window manager resizes a fixed window from code
+    win.setBounds({ x: b.x, y, width: b.width, height });
+    win.setResizable(false);
+  };
+  sessionBox = {
+    win,
+    get open() {
+      return data.open;
+    },
+    /** The conversation changed. A line from the other side unfolds the box, without taking focus. */
+    sync({ incoming = false } = {}) {
+      if (win.isDestroyed()) return;
+      if (incoming && !data.open) {
+        setOpen(true);
+        win.webContents.send('box:open', true);
+        win.showInactive();
+      }
+      win.webContents.send('box:messages', chatMessages.slice(-100));
+    },
+    setOpen,
+  };
+  data.setOpen = setOpen;
+  win.on('closed', () => {
+    boxData.delete(id);
+    if (sessionBox?.win === win) sessionBox = null;
+  });
   win.once('ready-to-show', () => win.showInactive());
   win.loadURL('bifrost://ui/indicator.html');
 
@@ -346,7 +393,10 @@ function openViewer({ id, password = '', mode = 'control', label = '' }) {
   win.__bifrostUi = false;
   const wcId = win.webContents.id;
   viewerParams.set(wcId, { serverUrl: cfg.server, params: { id, password, mode, label } });
-  win.on('closed', () => viewerParams.delete(wcId));
+  win.on('closed', () => {
+    viewerParams.delete(wcId);
+    dropRemoteAssistant(wcId, 'La fenêtre de session est fermée.');
+  });
   win.on('page-title-updated', (e) => e.preventDefault());
   win.loadURL('bifrost://app/');
   return win;
@@ -365,12 +415,16 @@ function desktopHelpers() {
         capture: createElectronCapture({ electron: { BrowserWindow, desktopCapturer, screen, ipcMain, session }, desktopDir: DESKTOP, log }),
       })
     : createWindowsHelpers(log);
-  return { ...base, askConsent: openConsent, showIndicator: openIndicator };
+  // assistantTools: what the assistant of the person in control may run here (fixed list, see
+  // heimdall/tools.js). Only this app offers it; the session decides when (control mode, owner's
+  // permission) and the person at the other end confirms each change on their side.
+  return { ...base, askConsent: openConsent, showIndicator: openIndicator, assistantTools: createTools() };
 }
 
 // --- Heimdall (assistant) -----------------------------------------------------------------------
 
-async function confirmAction(text) {
+/** Native confirmation, in the main process: neither the model nor a web page can answer it. */
+async function confirmAction(text, { parent = mainWindow, remote = false } = {}) {
   const opts = {
     type: 'question',
     buttons: ['Refuser', 'Autoriser'],
@@ -378,10 +432,10 @@ async function confirmAction(text) {
     cancelId: 0,
     noLink: true,
     title: 'Heimdall',
-    message: 'Heimdall demande l’autorisation d’agir sur cet ordinateur',
+    message: remote ? 'Heimdall demande l’autorisation d’agir sur l’ordinateur distant' : 'Heimdall demande l’autorisation d’agir sur cet ordinateur',
     detail: text,
   };
-  const r = mainWindow && !mainWindow.isDestroyed() ? await dialog.showMessageBox(mainWindow, opts) : await dialog.showMessageBox(opts);
+  const r = parent && !parent.isDestroyed() ? await dialog.showMessageBox(parent, opts) : await dialog.showMessageBox(opts);
   return r.response === 1;
 }
 
@@ -391,9 +445,73 @@ const heimdall = createHeimdall({
     const p = providerInfo(h.provider);
     return { provider: p.id, model: h.model || p.defaultModel, apiKey: secrets.open(h.keys?.[p.id]) };
   },
-  confirm: confirmAction,
+  confirm: (text) => confirmAction(text),
   log,
 });
+
+// Heimdall in a remote session: one assistant per viewer window. Its tools are the very same ones,
+// but they run on the remote PC: each call goes through the viewer page, over the end-to-end
+// encrypted channel, to the host's session (which only knows its fixed tool list).
+const REMOTE_TOOL_TIMEOUT_MS = 200_000;
+
+function remoteAssistant(wc) {
+  let a = viewerAssistants.get(wc.id);
+  if (a) return a;
+  a = { wc, platform: '', pending: new Map(), seq: 0, ai: null };
+  viewerAssistants.set(wc.id, a);
+  return a;
+}
+
+function dropRemoteAssistant(id, reason = 'La session distante est terminée.') {
+  const a = viewerAssistants.get(id);
+  if (!a) return;
+  viewerAssistants.delete(id);
+  for (const p of a.pending.values()) {
+    clearTimeout(p.timer);
+    p.reject(new Error(reason));
+  }
+  a.pending.clear();
+}
+
+function remoteTools(a) {
+  // Definitions and confirmation texts of the remote platform; only `run` differs: it asks the host.
+  const base = createTools({ platform: a.platform, sys: { os: { tmpdir: () => 'le dossier temporaire de l’ordinateur distant' } } });
+  const call = (name, args) =>
+    new Promise((resolve, reject) => {
+      if (a.wc.isDestroyed()) return reject(new Error('La fenêtre de session est fermée.'));
+      const reqId = String(++a.seq);
+      const timer = setTimeout(() => {
+        a.pending.delete(reqId);
+        reject(new Error('L’ordinateur distant n’a pas répondu (délai dépassé).'));
+      }, REMOTE_TOOL_TIMEOUT_MS);
+      a.pending.set(reqId, { resolve, reject, timer });
+      a.wc.send('vheimdall:run', { reqId, name, args });
+      return undefined;
+    });
+  const wrapped = new Map(base.list.map((t) => [t.name, { ...t, run: (args) => call(t.name, args ?? {}) }]));
+  return {
+    list: [...wrapped.values()],
+    definitions: base.definitions,
+    get: (name) => wrapped.get(name),
+  };
+}
+
+function remoteHeimdall(a) {
+  if (!a.ai) {
+    a.ai = createHeimdall({
+      getConfig: () => {
+        const h = settings.heimdall;
+        const p = providerInfo(h.provider);
+        return { provider: p.id, model: h.model || p.defaultModel, apiKey: secrets.open(h.keys?.[p.id]) };
+      },
+      confirm: (text) => confirmAction(text, { parent: BrowserWindow.fromWebContents(a.wc), remote: true }),
+      tools: remoteTools(a),
+      system: REMOTE_SYSTEM,
+      log,
+    });
+  }
+  return a.ai;
+}
 
 // --- updates ------------------------------------------------------------------------------------
 
@@ -435,9 +553,20 @@ async function checkForUpdate({ manual = false } = {}) {
   if (update.status === 'available') tray?.setToolTip(`Bifrost - mise à jour ${update.version} disponible`);
 }
 
+/** A line typed by the person at this PC (control panel or session box). */
+function sendChatLine(text) {
+  if (typeof text !== 'string' || !text.trim() || text.length > 2000) throw new Error('Message vide ou trop long.');
+  if (!host?.sendChat(text)) throw new Error('Aucune session en cours : le message n’a pas été envoyé.');
+  chatMessages = [...chatMessages, { from: 'me', text: text.trim(), ts: Date.now() }].slice(-MAX_CHAT_MESSAGES);
+  sessionBox?.sync();
+  pushState();
+}
+
 function receiveChat({ text, name }) {
   if (typeof text !== 'string' || !text) return;
   chatMessages = [...chatMessages, { from: 'peer', text, name: typeof name === 'string' ? name : '', ts: Date.now() }].slice(-MAX_CHAT_MESSAGES);
+  // The session box unfolds by itself: that is the notification.
+  if (sessionBox) return sessionBox.sync({ incoming: true });
   if (TEST_MODE || !Notification.isSupported()) return;
   // Someone typed while this window is hidden or in the background: say so, without stealing focus.
   if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isFocused()) {
@@ -446,6 +575,29 @@ function receiveChat({ text, name }) {
     note.show();
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.flashFrame(true);
   }
+}
+
+const ASSISTANT_ACTIONS = {
+  system_info: 'consulte les informations de cet ordinateur',
+  disk_usage: 'consulte l’espace disque',
+  top_processes: 'liste les programmes en cours',
+  check_updates: 'recherche les mises à jour',
+  empty_trash: 'vide la corbeille',
+  clean_temp_files: 'supprime les fichiers temporaires',
+  run_command: 'exécute une commande',
+};
+
+/** What the other side's assistant does here, written into the conversation so nothing is silent. */
+function noteAssistant({ name, args, peer }) {
+  const who = peer && peer !== 'inconnu' ? `L’assistant de ${peer}` : 'L’assistant Heimdall';
+  let text = `${who} ${ASSISTANT_ACTIONS[name] ?? `utilise l’outil ${String(name).slice(0, 40)}`}`;
+  if (name === 'run_command') {
+    // eslint-disable-next-line no-control-regex
+    text += ` : ${String(args?.command ?? '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 200)}`;
+  }
+  chatMessages = [...chatMessages, { from: 'system', text: `${text}.`, ts: Date.now() }].slice(-MAX_CHAT_MESSAGES);
+  sessionBox?.sync({ incoming: true });
+  pushState();
 }
 
 function startHosting() {
@@ -463,6 +615,7 @@ function startHosting() {
         chatMessages = []; // a new session, or the end of one: the conversation is gone
       }
       if (e.type === 'chat') receiveChat(e);
+      if (e.type === 'assistant') noteAssistant(e);
       if (e.type === 'session' && e.phase === 'incoming' && !TEST_MODE) showMainWindow();
       pushState();
     },
@@ -572,6 +725,7 @@ function registerIpc() {
 
   handle('perm:set', (p) => {
     if (typeof p?.clipboard === 'boolean') cfg.clipboard = p.clipboard;
+    if (typeof p?.assistant === 'boolean') cfg.assistant = p.assistant;
     if (['ask', 'allow', 'deny'].includes(p?.fileTransfer)) cfg.fileTransfer = p.fileTransfer;
     if (typeof p?.requireConsent === 'boolean') cfg.requireConsent = p.requireConsent;
     saveCfg();
@@ -701,12 +855,7 @@ function registerIpc() {
   });
 
   handle('session:end', () => host?.endSession());
-  handle('chat:send', (text) => {
-    if (typeof text !== 'string' || !text.trim() || text.length > 2000) throw new Error('Message vide ou trop long.');
-    if (!host?.sendChat(text)) throw new Error('Aucune session en cours : le message n’a pas été envoyé.');
-    chatMessages = [...chatMessages, { from: 'me', text: text.trim(), ts: Date.now() }].slice(-MAX_CHAT_MESSAGES);
-    pushState();
-  });
+  handle('chat:send', (text) => sendChatLine(text));
   handle('id:copy', () => clipboard.writeText(cfg.id));
   handle('transfers:open', async () => {
     const p = buildPermissions(cfg, { baseDir: HOME });
@@ -718,17 +867,65 @@ function registerIpc() {
     app.quit();
   });
 
-  // consent + indicator windows
+  // consent dialog and session box
   ipcMain.handle('consent:init', (e) => {
     const r = consentRequests.get(e.sender.id);
     return r ? { title: r.title, text: r.text, timeoutMs: r.timeoutMs } : null;
   });
   ipcMain.on('consent:answer', (e, yes) => consentRequests.get(e.sender.id)?.answer(yes === true));
-  ipcMain.handle('indicator:init', (e) => {
-    const r = indicatorData.get(e.sender.id);
-    return r ? { text: r.text, stopLabel: r.stopLabel, peer: r.peer, name: r.name, mode: r.mode } : null;
+  ipcMain.handle('box:init', (e) => {
+    const r = boxData.get(e.sender.id);
+    return r
+      ? { text: r.text, stopLabel: r.stopLabel, peer: r.peer, name: r.name, mode: r.mode, chat: true, open: r.open, messages: chatMessages.slice(-100) }
+      : null;
   });
-  ipcMain.on('indicator:stop', (e) => indicatorData.get(e.sender.id)?.stop());
+  ipcMain.on('box:stop', (e) => boxData.get(e.sender.id)?.stop());
+  ipcMain.on('box:open', (e, open) => boxData.get(e.sender.id)?.setOpen?.(open === true));
+  ipcMain.handle('box:send', (e, text) => {
+    if (!boxData.has(e.sender.id)) throw new Error('forbidden');
+    return sendChatLine(text);
+  });
+
+  // Heimdall inside a remote session (viewer windows only)
+  ipcMain.handle('vheimdall:state', (e) => {
+    if (!fromViewer(e)) throw new Error('forbidden');
+    const h = heimdallState();
+    return { enabled: h.enabled, hasKey: h.hasKey, provider: providerInfo(settings.heimdall.provider).label };
+  });
+  ipcMain.handle('vheimdall:remote', (e, info) => {
+    if (!fromViewer(e)) throw new Error('forbidden');
+    const platform = info?.platform;
+    if (!['win32', 'darwin', 'linux'].includes(platform)) {
+      dropRemoteAssistant(e.sender.id); // the session is over (or never offered the assistant)
+      return;
+    }
+    const a = remoteAssistant(e.sender);
+    if (a.platform !== platform) {
+      a.platform = platform;
+      a.ai = null; // another kind of PC: other tool descriptions
+    }
+  });
+  ipcMain.handle('vheimdall:ask', async (e, text) => {
+    if (!fromViewer(e)) throw new Error('forbidden');
+    if (!settings.heimdall.enabled) throw new Error('Heimdall est désactivé : activez-le dans les Réglages de Bifrost.');
+    const a = viewerAssistants.get(e.sender.id);
+    if (!a?.platform) throw new Error('Cet ordinateur distant n’autorise pas l’assistant.');
+    if (typeof text !== 'string' || !text.trim() || text.length > 4000) throw new Error('Message non valide.');
+    return remoteHeimdall(a).ask(text.trim());
+  });
+  ipcMain.handle('vheimdall:reset', (e) => {
+    if (!fromViewer(e)) throw new Error('forbidden');
+    viewerAssistants.get(e.sender.id)?.ai?.reset();
+  });
+  ipcMain.on('vheimdall:result', (e, reqId, result) => {
+    if (!fromViewer(e)) return;
+    const a = viewerAssistants.get(e.sender.id);
+    const p = a?.pending.get(String(reqId));
+    if (!p) return;
+    a.pending.delete(String(reqId));
+    clearTimeout(p.timer);
+    p.resolve(typeof result?.output === 'string' ? result.output.slice(0, 8000) : 'Aucune réponse.');
+  });
 
   // viewer windows
   ipcMain.on('viewer:close', (e) => {

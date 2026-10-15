@@ -469,7 +469,7 @@ Sur le poste **contrôleur**, la barre en haut indique le mode (et le code de v�
 | **Déconnecter** | Termine la session. |
 | Flèche **˄** | Masque la barre (une petite languette en haut au centre la ramène). |
 
-Sur le poste **contrôlé**, un **bandeau « Votre écran est partagé »** (pastille rouge clignotante, nom et adresse de la personne connectée) reste visible en permanence au-dessus de tout avec un bouton rouge **Arrêter**. Il n'existe volontairement pas de mode invisible. La personne devant le poste peut aussi cliquer sur **« Arrêter la session »** dans la fenêtre Bifrost, à tout moment.
+Sur le poste **contrôlé**, une **boîte « Votre écran est partagé »** (pastille rouge clignotante, nom et adresse de la personne connectée) reste visible en permanence au-dessus de tout, en bas à droite de l'écran, avec un bouton rouge **Arrêter**. Elle contient aussi la discussion : elle se déplie quand la personne en face écrit, et vous pouvez y répondre directement. Elle se déplace en la saisissant par son en-tête. Il n'existe volontairement pas de mode invisible. La personne devant le poste peut aussi cliquer sur **« Arrêter la session »** dans la fenêtre Bifrost, à tout moment.
 
 ### 5.5 Terminer
 

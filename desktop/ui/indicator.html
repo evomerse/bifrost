@@ -6,13 +6,26 @@
   <link rel="stylesheet" href="app.css">
 </head>
 <body class="bannerbody">
-  <div class="bannerbar" role="status">
-    <span class="rec" aria-hidden="true"></span>
-    <div class="who">
-      <strong id="text">Votre écran est partagé</strong>
-      <small id="detail"></small>
-    </div>
-    <button id="stop" type="button">Arrêter</button>
+  <div class="bannerbar" id="box" role="region" aria-label="Session à distance">
+    <header class="boxhead">
+      <span class="rec" aria-hidden="true"></span>
+      <div class="who">
+        <strong id="text">Votre écran est partagé</strong>
+        <small id="detail"></small>
+      </div>
+      <button id="chatToggle" type="button" class="boxicon" aria-expanded="false" aria-controls="boxChat" title="Discussion" aria-label="Discussion">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span id="badge" class="boxbadge" hidden></span>
+      </button>
+      <button id="stop" type="button">Arrêter</button>
+    </header>
+    <section id="boxChat" hidden>
+      <div id="chatLog" class="boxlog" aria-live="polite"></div>
+      <form id="chatForm" autocomplete="off">
+        <input id="chatInput" maxlength="2000" placeholder="Écrire un message…" aria-label="Message">
+        <button id="chatSend" type="submit">Envoyer</button>
+      </form>
+    </section>
   </div>
   <script src="indicator.js"></script>
 </body>

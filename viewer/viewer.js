@@ -11,6 +11,7 @@ import {
   unpackFrameBody,
   unpackVideoBody,
 } from '/shared/e2e.js';
+import { createAssistant } from '/assistant.js';
 import { createChat } from '/chat.js';
 import { createExtras } from '/extras.js';
 
@@ -107,6 +108,7 @@ function sendSecureKind(kind, body) {
 // In the desktop app the page is opened with a preload that supplies the relay address and,
 // for a connection started from the main window, what to connect to (nothing in the URL).
 const desktop = globalThis.bifrostDesktop ?? null;
+const assistant = createAssistant($, desktop);
 
 function relayUrl() {
   if (desktop?.serverUrl) return desktop.serverUrl;
@@ -185,6 +187,7 @@ function start(id) {
   mode = form.elements.mode.value === 'view' ? 'view' : 'control';
   e2e = new ViewerE2E({ id, password: $('password').value });
   chat.start({ sendJson: sendSecure });
+  assistant.start({ sendJson: sendSecure });
   extras.start({
     sendJson: sendSecure,
     sendChunk: (tid, last, bytes) => sendSecureKind(KIND_FILE, packFileBody(tid, last, bytes)),
@@ -284,6 +287,7 @@ async function onSecure(packet) {
       showMonitors(msg);
       break;
     default:
+      if (assistant.onJson(msg)) break; // Heimdall's answers from the host (and its permission)
       if (!chat.onJson(msg)) extras.onJson(msg); // chat; perm, clip, fs-*
   }
 }
@@ -335,6 +339,7 @@ function finish(text, isError = false) {
   safely(closeDecoder);
   safely(() => extras.stop());
   safely(() => chat.stop());
+  safely(() => assistant.stop());
   safely(() => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   });

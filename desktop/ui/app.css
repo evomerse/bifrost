@@ -232,6 +232,7 @@ body.has-talk .chat-pop { bottom: 220px; height: min(540px, calc(100vh - 350px))
 .msg { max-width: 82%; padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-text); border-bottom-right-radius: 3px; }
 .msg.bot, .msg.peer { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 3px; }
+.msg.sys { align-self: center; max-width: 100%; background: transparent; color: var(--muted); font-size: 0.82rem; text-align: center; padding: 2px 6px; }
 .msg.bot.pending { color: var(--muted); font-style: italic; }
 .step { align-self: flex-start; max-width: 90%; font-size: 0.85rem; color: var(--muted); border-left: 3px solid var(--accent); padding: 4px 10px; background: var(--panel); border-radius: 0 8px 8px 0; }
 .step.denied { border-left-color: var(--warn); }
@@ -248,14 +249,16 @@ body.dialog { min-height: 100vh; height: auto; }
 .timer #bar { height: 100%; width: 100%; background: var(--accent); }
 .buttons { justify-content: flex-end; margin-top: 12px; }
 .buttons button { min-width: 120px; }
-/* A small dark tab hanging from the top edge of the screen (TeamViewer-like), red only where it
-   matters: the recording dot and the Stop button. The window itself is transparent. */
-body.bannerbody { background: transparent; color: #f2f3f5; overflow: hidden; height: auto; user-select: none; }
+/* The session box: a small dark card at the bottom right of the shared screen (TeamViewer-like),
+   red only where it matters: the recording dot and the Stop button. Folded it is a slim bar;
+   unfolded it holds the conversation. The window itself is transparent and fills the card. */
+body.bannerbody { background: transparent; color: #f2f3f5; overflow: hidden; height: 100vh; user-select: none; }
 .bannerbar {
-  display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 10px 0 16px;
-  background: #1c1f24; border: 1px solid #343840; border-top: 0; border-radius: 0 0 14px 14px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  display: flex; flex-direction: column; height: 100vh;
+  background: #1c1f24; border: 1px solid #343840; border-radius: 14px; overflow: hidden;
 }
+.boxhead { display: flex; align-items: center; gap: 10px; flex: none; height: 64px; padding: 0 10px 0 16px; -webkit-app-region: drag; }
+.boxhead button { -webkit-app-region: no-drag; }
 .bannerbar .rec { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #ff4d4d; animation: rec 1.6s ease-in-out infinite; }
 @keyframes rec { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 77, 77, 0.55); } 50% { box-shadow: 0 0 0 6px rgba(255, 77, 77, 0); } }
 @media (prefers-reduced-motion: reduce) { .bannerbar .rec { animation: none; } }
@@ -268,3 +271,32 @@ body.bannerbody { background: transparent; color: #f2f3f5; overflow: hidden; hei
   min-height: 34px; padding: 0 16px; font-weight: 600;
 }
 .bannerbar button:hover { background: #ec4d4d; }
+.bannerbar .boxicon {
+  position: relative; display: grid; place-items: center; width: 36px; min-height: 36px; padding: 0;
+  background: transparent; color: #cfd3d9; border: 1px solid #343840;
+}
+.bannerbar .boxicon:hover { background: #2b3038; color: #fff; }
+.bannerbar .boxicon[aria-expanded="true"] { background: #2f6fed; border-color: #2f6fed; color: #fff; }
+.bannerbar .boxicon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.boxbadge {
+  position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
+  background: #d93a3a; color: #fff; font: 700 0.7rem/18px 'Segoe UI', system-ui, sans-serif; text-align: center;
+}
+#boxChat { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px; border-top: 1px solid #343840; padding-top: 10px; user-select: text; }
+.boxlog {
+  flex: 1; min-height: 0; overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px;
+  background: #15171a; border: 1px solid #343840; border-radius: 10px;
+}
+.boxlog .empty { margin: auto; color: #9aa1ab; font-size: 0.85rem; }
+.boxlog .msg { max-width: 86%; padding: 6px 11px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.95rem; }
+.boxlog .msg.me { align-self: flex-end; background: #2f6fed; color: #fff; border-bottom-right-radius: 3px; }
+.boxlog .msg.peer { align-self: flex-start; background: #2b3038; border-bottom-left-radius: 3px; }
+.boxlog .msg.sys { align-self: center; max-width: 100%; background: transparent; color: #9aa1ab; font-size: 0.8rem; text-align: center; padding: 2px 6px; }
+#chatForm { display: flex; gap: 8px; margin: 0; }
+#chatForm input {
+  flex: 1; min-width: 0; font: inherit; padding: 8px 10px; color: #f2f3f5; background: #15171a;
+  border: 1px solid #343840; border-radius: 8px;
+}
+#chatForm input:focus { outline: none; border-color: #2f6fed; }
+.bannerbar #chatSend { background: #2f6fed; }
+.bannerbar #chatSend:hover { background: #4b84f5; }

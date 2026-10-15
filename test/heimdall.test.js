@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EXTERNAL_LINKS, PROVIDERS, buildRequest, parseResponse, parseTextToolCall, providerInfo } from '../desktop/heimdall/providers.js';
 import { createTools } from '../desktop/heimdall/tools.js';
-import { createHeimdall } from '../desktop/heimdall/assistant.js';
+import { REMOTE_SYSTEM, createHeimdall } from '../desktop/heimdall/assistant.js';
 import { createSecretStore } from '../desktop/heimdall/secrets.js';
 
 const tools = [
@@ -234,6 +234,28 @@ test('assistant: Claude Code provider uses the text protocol', async () => {
   assert.equal(r.steps[0].name, 'system_info');
   assert.match(prompts[0], /system_info/);
   assert.match(prompts[1], /Résultat de l’outil system_info/);
+});
+
+test('assistant: the remote session uses its own system prompt', async () => {
+  const sent = [];
+  const fetchFn = async (url, init) => {
+    sent.push(JSON.parse(init.body));
+    return { ok: true, status: 200, statusText: 'x', json: async () => ({ choices: [{ message: { content: 'ok' } }] }) };
+  };
+  const make = (extra = {}) =>
+    createHeimdall({ getConfig: () => ({ provider: 'groq', apiKey: 'k' }), confirm: async () => true, fetchFn, ...extra });
+  await make().ask('salut');
+  await make({ system: REMOTE_SYSTEM }).ask('salut');
+  assert.match(sent[0].messages[0].content, /devant cet ordinateur/);
+  assert.match(sent[1].messages[0].content, /ordinateur distant/);
+  assert.doesNotMatch(sent[1].messages[0].content, /devant cet ordinateur/);
+});
+
+test('tools: descriptions for another platform never name this machine', () => {
+  const t = createTools({ platform: 'win32', sys: { os: { tmpdir: () => 'le dossier temporaire de l’ordinateur distant' } } });
+  assert.match(t.get('clean_temp_files').confirm(), /ordinateur distant/);
+  assert.match(t.get('empty_trash').description, /corbeille/);
+  assert.equal(createTools({ platform: 'linux' }).get('check_updates').description.includes('Windows'), false);
 });
 
 test('secret store: encrypted when the OS offers it, readable round trip, never plain in that case', () => {

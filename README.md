@@ -30,7 +30,7 @@ npm run desktop                   # ou : lancer directement depuis les sources
 
 Ce qui se passe quand quelqu'un se connecte à vous :
 - une **fenêtre d'accord** s'ouvre au premier plan, avec le nom indiqué (non vérifié), l'adresse et le **code de vérification** à comparer ; « Refuser » est le bouton par défaut, fermer la fenêtre ou ne rien faire pendant 30 s refuse ;
-- tant que la session dure, un **bandeau** (pastille rouge, qui regarde, bouton rouge « Arrêter ») reste au-dessus de tout (la fenêtre principale a aussi « Arrêter la session ») ;
+- tant que la session dure, une **boîte de session** (pastille rouge, qui regarde, bouton rouge « Arrêter ») reste au-dessus de tout, en bas à droite de l'écran, comme dans TeamViewer : repliée en simple barre, elle se déplie toute seule quand la personne en face écrit, et on y répond sans ouvrir la fenêtre principale (qui a aussi « Arrêter la session ») ;
 - avec un mot de passe défini, la personne qui le connaît entre sans accord (sauf si vous cochez « Toujours demander mon accord »).
 
 **Serveur** : l'application a besoin d'un relais Bifrost. Deux façons :
@@ -65,7 +65,7 @@ Disposition inspirée de RustDesk (barre de navigation à gauche, votre identifi
 
 Le logo est l'officiel (`desktop/assets/logo-source.jpg`). C'est le seul endroit qui joue l'effet Bifrost : un halo arc-en-ciel autour du logo, une fois, quand une connexion s'établit (vers un autre ordinateur ou depuis un autre vers celui-ci). Désactivé si le système demande de réduire les animations.
 
-**Discussion entre les deux personnes** : pendant une session, un bouton « Discussion » apparaît des deux côtés (dans la barre de la visionneuse, et en bas à droite de la fenêtre de l'ordinateur contrôlé). Les messages passent par le même canal chiffré de bout en bout que l'écran, le relais ne les lit pas ; ils restent **en mémoire seulement** et disparaissent à la fin de la session (rien n'est écrit sur disque). Disponible en « voir seulement » aussi. Si la fenêtre de l'ordinateur contrôlé est cachée ou en arrière-plan, une notification signale le message. 2 000 caractères par message, 20 messages par tranche de 10 s au maximum. Pas de discussion avec l'agent en ligne de commande ni le service Windows (rien pour l'afficher).
+**Discussion entre les deux personnes** : pendant une session, un bouton « Discussion » apparaît des deux côtés (dans la barre de la visionneuse, et en bas à droite de la fenêtre de l'ordinateur contrôlé). Les messages passent par le même canal chiffré de bout en bout que l'écran, le relais ne les lit pas ; ils restent **en mémoire seulement** et disparaissent à la fin de la session (rien n'est écrit sur disque). Disponible en « voir seulement » aussi. Sur l'ordinateur contrôlé, les messages arrivent dans la boîte de session en bas à droite, qui se déplie d'elle-même sans prendre le focus. 2 000 caractères par message, 20 messages par tranche de 10 s au maximum. Pas de discussion avec l'agent en ligne de commande ni le service Windows (rien pour l'afficher).
 
 Pendant le contrôle, **un seul pointeur** est visible : celui de l'ordinateur distant (déjà dessiné dans la vidéo). Le pointeur local est masqué au-dessus de l'écran distant ; en « voir seulement », il reste affiché.
 
@@ -90,6 +90,8 @@ Une copie lancée depuis les sources (`npm run desktop`) ne s'installe pas toute
 - **Des outils précis, pas un accès libre** : `system_info`, `disk_usage`, `top_processes`, `check_updates` (lecture seule, sans confirmation) ; `empty_trash`, `clean_temp_files` et `run_command` demandent **à chaque fois** votre accord dans une fenêtre native du programme, avec le texte exact de ce qui va être fait. La page web et le modèle ne peuvent pas répondre à votre place.
 - La conversation reste en mémoire seulement (« Nouvelle conversation » l'efface). Ce que Heimdall voit d'une commande (sa sortie) est envoyé au fournisseur : n'activez pas `run_command` pour des données sensibles.
 - Avec **Claude Code**, Heimdall ne passe pas par les appels d'outils de l'API : il demande au modèle un bloc JSON décrivant l'outil, qu'il exécute avec les mêmes confirmations.
+
+**Heimdall pendant une prise en main** : en « Prendre le contrôle » (application de bureau), un bouton ✨ **Heimdall** apparaît dans la barre de la visionneuse. Ses outils agissent alors sur **l'ordinateur distant**, pas sur le vôtre : chaque appel part par le canal chiffré de bout en bout vers l'hôte, qui n'exécute que la liste d'outils ci-dessus. Les actions qui modifient quelque chose vous demandent **votre** accord (fenêtre native de votre Bifrost, texte exact de la commande) ; la personne en face voit chaque action écrite dans sa boîte de session (« L'assistant de Camille exécute une commande : … »). La clé API et la conversation restent sur **votre** PC. Le propriétaire de l'ordinateur contrôlé peut l'interdire (*Autorisations → Laisser l'assistant Heimdall…*, activé par défaut) ; l'assistant n'est jamais offert en « Voir seulement », ni par l'agent en ligne de commande ou le service Windows.
 
 ## Démarrage rapide (test en local, sans l'application)
 

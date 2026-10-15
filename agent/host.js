@@ -19,6 +19,7 @@ import { PasswordGuard, Session } from './session.js';
  *     {type:'status', status:'connecting'|'online'|'offline', server, id}
  *     {type:'session', phase:'incoming'|'ended', ip?, reason?}
  *     {type:'chat', text, name}   a line typed by the person on the other side
+ *     {type:'assistant', name, args, peer}   the other side's assistant runs a tool on this PC
  * @returns {{ stop(), reconnect(), endSession(reason?), sendChat(text), readonly status, readonly session }}
  */
 export function startHost({ cfg, cfgFile, helpers, serviceMode = false, chat = false, log = () => {}, onEvent = () => {} }) {
@@ -68,6 +69,7 @@ export function startHost({ cfg, cfgFile, helpers, serviceMode = false, chat = f
           bufferedAmount: () => sock.bufferedAmount,
           chat,
           onChat: chat ? (text, name) => onEvent({ type: 'chat', text, name }) : undefined,
+          onAssistant: (a) => onEvent({ type: 'assistant', ...a }),
           onEnd: (reason) => {
             if (session === s) session = null;
             onEvent({ type: 'session', phase: 'ended', ip: s.peerIp, reason });

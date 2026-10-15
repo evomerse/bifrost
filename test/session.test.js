@@ -42,14 +42,14 @@ async function configWithPassword(password, extra = {}) {
 }
 
 /** A Session wired to fake OS helpers. */
-function harness({ config, consent = true, guard = new PasswordGuard(), adaptIntervalMs = 60_000, keyframeMinIntervalMs = 0, permissions, chat }) {
+function harness({ config, consent = true, guard = new PasswordGuard(), adaptIntervalMs = 60_000, keyframeMinIntervalMs = 0, permissions, chat, assistantTools }) {
   const sent = []; // plaintext JSON toward the viewer
   const binary = []; // encrypted packets toward the viewer
   const events = {
     input: [], captureStarted: 0, indicator: null, ended: null, consentAsked: 0, consentText: '',
     keyRequests: 0, bitrates: [], captureOptions: null,
     clipboardStarted: 0, clipboardSet: [], clipboardChange: null, consentTexts: [],
-    monitorRequests: [], onMonitors: null, chat: [],
+    monitorRequests: [], onMonitors: null, chat: [], assistant: [],
   };
   let buffered = 0;
   const helpers = {
@@ -82,6 +82,7 @@ function harness({ config, consent = true, guard = new PasswordGuard(), adaptInt
       events.indicator = o;
       return { stop() {} };
     },
+    ...(assistantTools ? { assistantTools } : {}),
   };
   const session = new Session({
     send: (m) => sent.push(m),
@@ -95,14 +96,15 @@ function harness({ config, consent = true, guard = new PasswordGuard(), adaptInt
     keyframeMinIntervalMs,
     ...(permissions ? { permissions } : {}),
     ...(chat ? { chat: true, onChat: (text, name) => events.chat.push({ text, name }) } : {}),
+    onAssistant: (a) => events.assistant.push(a),
     onEnd: (r) => (events.ended = r),
   });
   return { session, sent, binary, events, guard, setBuffered: (n) => (buffered = n) };
 }
 
 /** Plays the viewer side of the handshake against a session. */
-async function connect({ config, consent, guard, password = '', mode = 'control', label = 'Nathan', codecs = ['jpeg'], adaptIntervalMs, permissions, chat }) {
-  const h = harness({ config, consent, guard, adaptIntervalMs, permissions, chat });
+async function connect({ config, consent, guard, password = '', mode = 'control', label = 'Nathan', codecs = ['jpeg'], adaptIntervalMs, permissions, chat, assistantTools }) {
+  const h = harness({ config, consent, guard, adaptIntervalMs, permissions, chat, assistantTools });
   h.session.begin();
   const challenge = h.sent.find((m) => m.t === 'challenge');
   const viewer = new ViewerE2E({ id: config.id, password });
@@ -774,3 +776,103 @@ test('capture frame parser reassembles frames split across chunks', () => {
 });
 
 void KIND_JSON;
+
+// --- Heimdall, the assistant of the person in control ---------------------------------------------
+
+/** A fixed tool list like heimdall/tools.js: what runs, in what order, and a way to hold a call. */
+function fakeAssistantTools() {
+  const ran = [];
+  const gates = [];
+  const tool = (name, fn) => ({
+    name,
+    async run(args) {
+      ran.push([name, args]);
+      return fn(args);
+    },
+  });
+  const map = new Map([
+    ['system_info', tool('system_info', async () => 'Nom : PC-CLIENT')],
+    ['run_command', tool('run_command', async (a) => `ran: ${a.command}`)],
+    ['boom', tool('boom', async () => { throw new Error('exploded'); })],
+    ['slow', tool('slow', () => new Promise((resolve) => gates.push(resolve)))],
+  ]);
+  return { ran, gates, get: (n) => map.get(n), definitions: () => [] };
+}
+const ASSISTANT_PERMS = { clipboard: false, fileTransfer: 'deny', roots: [], assistant: true };
+
+test('assistant: offered in control mode only, runs the fixed tools and reports them', async () => {
+  const tools = fakeAssistantTools();
+  const c = await connect({ config: { id: ID }, consent: true, permissions: ASSISTANT_PERMS, assistantTools: tools, label: 'Camille' });
+  const first = await c.receive();
+  assert.deepEqual(first.at(-1), { t: 'perm', clipboard: false, assistant: { platform: process.platform }, files: 'deny', roots: [] });
+
+  await c.input({ t: 'hd-run', id: 'r1', name: 'system_info', args: {} });
+  await c.input({ t: 'hd-run', id: 'r2', name: 'run_command', args: { command: 'dir C:' } });
+  await waitFor(() => c.binary.length >= first.length + 2, 'two results');
+  assert.deepEqual(await c.receive(), [
+    { t: 'hd-result', id: 'r1', ok: true, output: 'Nom : PC-CLIENT' },
+    { t: 'hd-result', id: 'r2', ok: true, output: 'ran: dir C:' },
+  ]);
+  assert.deepEqual(tools.ran.map((r) => r[0]), ['system_info', 'run_command']);
+  assert.deepEqual(c.events.assistant.map((a) => [a.name, a.peer]), [['system_info', 'Camille'], ['run_command', 'Camille']], 'the person at the PC is told');
+  assert.deepEqual(c.events.input, [], 'a tool call is never keyboard input');
+});
+
+test('assistant: view-only sessions, a refusing owner and hosts without tools get nothing', async () => {
+  const tools = fakeAssistantTools();
+  for (const [name, opts] of [
+    ['view-only', { mode: 'view', permissions: ASSISTANT_PERMS, assistantTools: tools }],
+    ['owner said no', { permissions: { ...ASSISTANT_PERMS, assistant: false }, assistantTools: tools }],
+    ['default permissions', { assistantTools: tools }],
+    ['no tools in this host (CLI agent, service)', { permissions: ASSISTANT_PERMS }],
+  ]) {
+    const c = await connect({ config: { id: ID }, consent: true, ...opts });
+    const msgs = await c.receive();
+    assert.equal(msgs.find((m) => m.t === 'perm').assistant, undefined, name);
+    await c.input({ t: 'hd-run', id: 'x', name: 'system_info', args: {} });
+    await tick();
+    assert.equal(tools.ran.length, 0, `${name}: nothing was run`);
+    assert.deepEqual(c.events.assistant, [], name);
+    assert.equal((await c.receive()).length, 0, `${name}: no answer either`);
+  }
+});
+
+test('assistant: unknown tools, failures, bad requests and floods', async () => {
+  const tools = fakeAssistantTools();
+  const c = await connect({ config: { id: ID }, consent: true, permissions: ASSISTANT_PERMS, assistantTools: tools });
+  const first = await c.receive();
+  await c.input({ t: 'hd-run', id: 'u', name: 'format_disk', args: {} });
+  await c.input({ t: 'hd-run', id: 'e', name: 'boom', args: {} });
+  await c.input({ t: 'hd-run', name: 'system_info' }); // no id: ignored
+  await c.input({ t: 'hd-run', id: 'a', name: 'run_command', args: ['not', 'an', 'object'] });
+  await waitFor(() => c.binary.length >= first.length + 3, 'answers');
+  const out = await c.receive();
+  assert.deepEqual(out.find((m) => m.id === 'u'), { t: 'hd-result', id: 'u', ok: false, output: 'Outil inconnu.' });
+  assert.deepEqual(out.find((m) => m.id === 'e'), { t: 'hd-result', id: 'e', ok: false, output: 'Erreur : exploded' });
+  assert.equal(out.find((m) => m.id === 'a').ok, true);
+  assert.deepEqual(tools.ran.find((r) => r[0] === 'run_command')[1], {}, 'args that are not an object become {}');
+  assert.equal(tools.ran.some((r) => r[0] === 'format_disk'), false);
+
+  // one tool at a time, a bounded queue behind it
+  for (let i = 0; i < 12; i++) await c.input({ t: 'hd-run', id: `s${i}`, name: 'slow', args: {} });
+  await waitFor(() => tools.gates.length === 1, 'first slow call running');
+  await tick();
+  assert.equal(tools.gates.length, 1, 'only one runs at a time');
+  await waitFor(() => c.binary.length >= first.length + 3 + 3, 'refusals');
+  const refused = (await c.receive()).filter((m) => m.t === 'hd-result' && m.output === 'Trop de demandes en attente.');
+  assert.ok(refused.length >= 3, `the queue is bounded (refused ${refused.length})`);
+});
+
+test('assistant: nothing runs after the session ended', async () => {
+  const tools = fakeAssistantTools();
+  const c = await connect({ config: { id: ID }, consent: true, permissions: ASSISTANT_PERMS, assistantTools: tools });
+  await c.receive();
+  await c.input({ t: 'hd-run', id: 's0', name: 'slow', args: {} });
+  await c.input({ t: 'hd-run', id: 's1', name: 'system_info', args: {} });
+  await waitFor(() => tools.gates.length === 1, 'slow call running');
+  c.session.end('viewer-left');
+  tools.gates.shift()('late');
+  await tick();
+  await tick();
+  assert.deepEqual(tools.ran.map((r) => r[0]), ['slow'], 'the queued call is dropped with the session');
+});

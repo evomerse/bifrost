@@ -202,6 +202,7 @@ function render(s) {
   $('requireConsent').disabled = !s.hasPassword;
 
   $('clipboard').checked = s.clipboard;
+  $('assistant').checked = s.assistant;
   $('fileTransfer').value = s.fileTransfer;
 
   const shares = $('shares');
@@ -290,6 +291,7 @@ $('pwForm').addEventListener('submit', async (e) => {
 $('pwClear').addEventListener('click', () => guarded($('pwError'), () => api.clearPassword()));
 $('requireConsent').addEventListener('change', (e) => api.setPermissions({ requireConsent: e.target.checked }));
 $('clipboard').addEventListener('change', (e) => api.setPermissions({ clipboard: e.target.checked }));
+$('assistant').addEventListener('change', (e) => api.setPermissions({ assistant: e.target.checked }));
 $('fileTransfer').addEventListener('change', (e) => api.setPermissions({ fileTransfer: e.target.value }));
 $('addShare').addEventListener('click', () => api.addShare());
 $('openTransfers').addEventListener('click', () => api.openTransfers());
@@ -459,7 +461,7 @@ function renderTalk(s) {
     if (talkRendered === 0) talkLog.replaceChildren();
     for (const m of list.slice(talkRendered)) {
       const div = document.createElement('div');
-      div.className = `msg ${m.from === 'me' ? 'user' : 'peer'}`;
+      div.className = `msg ${m.from === 'me' ? 'user' : m.from === 'system' ? 'sys' : 'peer'}`;
       div.textContent = m.text;
       talkLog.append(div);
     }

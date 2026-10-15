@@ -51,6 +51,13 @@ test('invalid settings fall back to the safe default', () => {
   assert.equal(buildPermissions({ clipboard: false, fileTransfer: 'deny', transferDir: tmp('bf-y-') }).clipboard, false);
 });
 
+test('assistant of the person in control: on by default, off only when explicitly refused', () => {
+  const dir = tmp('bf-ai-');
+  assert.equal(buildPermissions({ transferDir: dir }).assistant, true);
+  assert.equal(buildPermissions({ assistant: 'maybe', transferDir: dir }).assistant, true);
+  assert.equal(buildPermissions({ assistant: false, transferDir: dir }).assistant, false);
+});
+
 test('describePermissions does not create anything', () => {
   const base = tmp('bf-desc-');
   const text = describePermissions({ transferDir: path.join(base, 'T') }, false);

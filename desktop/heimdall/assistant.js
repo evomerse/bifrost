@@ -16,6 +16,17 @@ const SYSTEM =
   'appelle-le, puis résume ce qu’il a renvoyé. Si une action est refusée par la personne, accepte-le sans insister. ' +
   'N’utilise run_command que si aucun autre outil ne convient.';
 
+/**
+ * Heimdall used from a remote session: the person talking to it is a technician connected to
+ * another computer, and its tools act on that computer.
+ */
+export const REMOTE_SYSTEM =
+  'Tu es Heimdall, le gardien du Bifrost : l’assistant du technicien qui a pris la main, avec Bifrost, sur un ordinateur distant. ' +
+  'Tu l’aides à diagnostiquer et à dépanner cet ordinateur distant (pas le sien), en français, de façon brève et claire. ' +
+  'Tes outils agissent sur l’ordinateur distant uniquement. N’invente jamais le résultat d’un outil : ' +
+  'appelle-le, puis résume ce qu’il a renvoyé. Si une action est refusée par le technicien, accepte-le sans insister. ' +
+  'N’utilise run_command que si aucun autre outil ne convient.';
+
 /** Asks the `claude` command line tool (Claude Code) one question, no API key involved. */
 export function runClaudeCode(prompt, { spawnFn = spawn, timeoutMs = 120_000 } = {}) {
   return new Promise((resolve, reject) => {
@@ -56,8 +67,9 @@ export function runClaudeCode(prompt, { spawnFn = spawn, timeoutMs = 120_000 } =
  * @param {typeof fetch} [o.fetchFn]
  * @param {ReturnType<typeof createTools>} [o.tools]
  * @param {(prompt:string)=>Promise<string>} [o.claudeCode]
+ * @param {string} [o.system]   system prompt (REMOTE_SYSTEM when the tools act on another computer)
  */
-export function createHeimdall({ getConfig, confirm, fetchFn = fetch, tools = createTools(), claudeCode = runClaudeCode, log = () => {} }) {
+export function createHeimdall({ getConfig, confirm, fetchFn = fetch, tools = createTools(), claudeCode = runClaudeCode, system = SYSTEM, log = () => {} }) {
   let history = [];
 
   async function callApi(cfg, definitions) {
@@ -66,7 +78,7 @@ export function createHeimdall({ getConfig, confirm, fetchFn = fetch, tools = cr
     const { url, headers, body } = buildRequest(provider, {
       model: cfg.model,
       apiKey: cfg.apiKey,
-      system: SYSTEM,
+      system,
       messages: history,
       tools: definitions,
     });
@@ -94,7 +106,7 @@ export function createHeimdall({ getConfig, confirm, fetchFn = fetch, tools = cr
         return `Résultat de l’outil ${m.name} : ${m.text}`;
       })
       .join('\n\n');
-    const text = await claudeCode(`${SYSTEM}\n\n${textProtocolPrompt(definitions)}\n\n${convo}\n\nHeimdall :`);
+    const text = await claudeCode(`${system}\n\n${textProtocolPrompt(definitions)}\n\n${convo}\n\nHeimdall :`);
     const call = parseTextToolCall(text);
     return call ? { text: '', toolCalls: [call] } : { text, toolCalls: [] };
   }

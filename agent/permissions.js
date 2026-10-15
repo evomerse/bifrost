@@ -28,6 +28,8 @@ export function buildPermissions(cfg, { serviceMode = false, baseDir = null, log
   }
   return {
     clipboard: cfg.clipboard !== false,
+    // the assistant of the person in control (only offered by the desktop app, and only in control mode)
+    assistant: cfg.assistant !== false,
     fileTransfer: ['ask', 'allow', 'deny'].includes(cfg.fileTransfer) ? cfg.fileTransfer : 'ask',
     roots,
     maxFileBytes: cfg.maxFileBytes,

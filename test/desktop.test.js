@@ -134,3 +134,9 @@ test('desktop app: portable capture path (macOS/Linux code) works end to end', {
   assert.deepEqual(r.failed ?? [], [], JSON.stringify(r.checks, null, 2));
   assert.equal(r.error, undefined, r.error);
 });
+
+test('desktop app: session box (bottom right, chat, assistant activity) and Heimdall in the viewer', { skip, timeout: 150_000 }, async () => {
+  const r = await runApp('assistant.scenario.mjs', { timeoutMs: 80_000 });
+  assert.deepEqual(r.failed ?? [], [], JSON.stringify(r.checks, null, 2));
+  assert.equal(r.error, undefined, r.error);
+});
