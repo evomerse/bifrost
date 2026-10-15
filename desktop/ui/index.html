@@ -4,111 +4,273 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bifrost</title>
+  <link rel="icon" href="logo.png" type="image/png">
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
-  <header class="top">
-    <h1>Bifrost</h1>
-    <span id="statusChip" class="chip" role="status">Connexion…</span>
-  </header>
+  <div class="shell">
+    <!-- left rail: navigation -->
+    <nav class="rail" role="tablist" aria-label="Sections">
+      <span id="railLogo" class="rail-logo"><img src="logo.png" alt="Bifrost" width="44" height="44"></span>
+      <button id="tabHome" type="button" role="tab" data-tab="home" aria-selected="true" title="Accueil">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        <span>Accueil</span>
+      </button>
+    </nav>
 
-  <div id="sessionBanner" class="banner" hidden>
-    <span id="sessionText"></span>
-    <button id="endSession" type="button" class="danger">Arrêter la session</button>
-  </div>
+    <!-- bottom right: Heimdall and settings -->
+    <div class="fab-group" role="group" aria-label="Discussion, assistant et réglages">
+      <button id="tabTalk" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="panelTalk" title="Discussion avec la personne connectée" aria-label="Discussion" hidden>
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-8l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M7.5 10h9M7.5 13h5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span id="talkBadge" class="badge" hidden></span>
+      </button>
+      <button id="tabHeimdall" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="panelHeimdall" title="Heimdall" aria-label="Heimdall" hidden>
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path transform="translate(-0.5 0)" d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      </button>
+      <button id="tabSettings" type="button" data-tab="settings" aria-pressed="false" title="Réglages" aria-label="Réglages">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path transform="translate(-1 0)" d="M19.4 13a7.5 7.5 0 0 0 0-2l2-1.5-2-3.4-2.3.9a7.5 7.5 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.5 7.5 0 0 0-1.7 1l-2.3-.9-2 3.4 2 1.5a7.5 7.5 0 0 0 0 2l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.5 7.5 0 0 0 1.7-1l2.3.9 2-3.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
 
-  <main class="grid">
-    <section class="card" aria-labelledby="meTitle">
-      <h2 id="meTitle">Cet ordinateur</h2>
-      <p class="muted">Donnez cet identifiant à la personne qui doit se connecter.</p>
-      <div class="idrow">
-        <output id="myId" aria-label="Identifiant de cet ordinateur">--- --- ---</output>
-        <button id="copyId" type="button">Copier</button>
+    <div class="content">
+      <header class="top">
+        <h1>Bifrost</h1>
+        <span id="statusChip" class="chip" role="status">Connexion…</span>
+      </header>
+
+      <div id="updateBanner" class="banner info" hidden>
+        <span id="updateText"></span>
+        <span class="banner-actions">
+          <progress id="updateProgress" max="1" value="0" hidden></progress>
+          <button id="updateInstall" type="button" class="primary small">Installer et redémarrer</button>
+          <button id="updatePage" type="button" class="ghost small">Voir les nouveautés</button>
+        </span>
       </div>
 
-      <h3>Accès sans surveillance</h3>
-      <p id="pwState" class="muted"></p>
-      <form id="pwForm" class="row" autocomplete="off">
-        <input id="pwInput" type="password" placeholder="Nouveau mot de passe (12 caractères minimum)" minlength="12" autocomplete="new-password">
-        <button type="submit">Définir</button>
-        <button id="pwClear" type="button" class="ghost" hidden>Supprimer</button>
-      </form>
-      <p id="pwError" class="error" role="alert" hidden></p>
-      <label class="check"><input id="requireConsent" type="checkbox"> Toujours demander mon accord, même avec le mot de passe</label>
-
-      <h3>Ce que les personnes connectées peuvent faire en plus</h3>
-      <label class="check"><input id="clipboard" type="checkbox"> Synchroniser le presse-papiers (texte)</label>
-      <label class="field">Transfert de fichiers
-        <select id="fileTransfer">
-          <option value="ask">Autorisé, avec mon accord à chaque fichier</option>
-          <option value="allow">Autorisé sans demander</option>
-          <option value="deny">Désactivé</option>
-        </select>
-      </label>
-
-      <h3>Dossiers partagés</h3>
-      <p class="muted">Les personnes connectées ne voient que ces dossiers, jamais le reste du disque.</p>
-      <ul id="shares" class="list"></ul>
-      <div class="row">
-        <button id="addShare" type="button">Ajouter un dossier…</button>
-        <button id="openTransfers" type="button" class="ghost">Ouvrir le dossier des fichiers reçus</button>
+      <div id="sessionBanner" class="banner red" hidden>
+        <span id="sessionText"></span>
+        <button id="endSession" type="button" class="danger small">Arrêter la session</button>
       </div>
-    </section>
 
-    <section class="card" aria-labelledby="remoteTitle">
-      <h2 id="remoteTitle">Contrôler un autre ordinateur</h2>
-      <form id="connectForm" autocomplete="off">
-        <label class="field">Identifiant
-          <input id="remoteId" inputmode="numeric" placeholder="123 456 789" maxlength="11" required>
-        </label>
-        <label class="field">Mot de passe <span class="muted">(accès sans surveillance, facultatif)</span>
-          <input id="remotePassword" type="password" autocomplete="off">
-        </label>
-        <fieldset>
-          <label class="check"><input type="radio" name="mode" value="control" checked> Prendre le contrôle</label>
-          <label class="check"><input type="radio" name="mode" value="view"> Voir seulement</label>
-        </fieldset>
-        <button id="connectBtn" type="submit" class="primary">Se connecter</button>
-      </form>
-      <p id="connectError" class="error" role="alert" hidden></p>
+      <!-- ===== Accueil ===== -->
+      <main id="panelHome" class="panel home" role="tabpanel">
+        <div class="col">
+          <section class="card" aria-labelledby="meTitle">
+            <h2 id="meTitle">Votre identifiant</h2>
+            <div class="idrow">
+              <output id="myId" aria-label="Identifiant de cet ordinateur">--- --- ---</output>
+              <button id="copyId" type="button" class="ghost">Copier</button>
+            </div>
+            <p class="muted">Donnez-le à la personne qui doit se connecter à cet ordinateur.</p>
 
-      <h3>Récents</h3>
-      <ul id="recent" class="list"></ul>
-      <p id="noRecent" class="muted">Aucune connexion pour l’instant.</p>
-    </section>
-  </main>
+            <h3>Mot de passe permanent</h3>
+            <p id="pwState" class="muted"></p>
+            <form id="pwForm" class="row" autocomplete="off">
+              <input id="pwInput" type="password" placeholder="12 caractères minimum" minlength="12" autocomplete="new-password">
+              <button type="submit">Définir</button>
+              <button id="pwClear" type="button" class="ghost" hidden>Supprimer</button>
+            </form>
+            <p id="pwError" class="error" role="alert" hidden></p>
+            <label class="check"><input id="requireConsent" type="checkbox"> Toujours demander mon accord, même avec le mot de passe</label>
+          </section>
 
-  <footer class="foot">
-    <details>
-      <summary>Paramètres</summary>
-      <div class="settings">
-        <form id="serverForm" class="row" autocomplete="off">
-          <label class="field grow">Serveur Bifrost
-            <input id="serverInput" placeholder="wss://bifrost.exemple.fr">
+          <section class="card" aria-labelledby="permTitle">
+            <h2 id="permTitle">Autorisations</h2>
+            <label class="check"><input id="clipboard" type="checkbox"> Synchroniser le presse-papiers (texte)</label>
+            <label class="field">Transfert de fichiers
+              <select id="fileTransfer">
+                <option value="ask">Autorisé, avec mon accord à chaque fichier</option>
+                <option value="allow">Autorisé sans demander</option>
+                <option value="deny">Désactivé</option>
+              </select>
+            </label>
+
+            <h3>Dossiers partagés</h3>
+            <p class="muted">Les personnes connectées ne voient que ces dossiers, jamais le reste du disque.</p>
+            <ul id="shares" class="list"></ul>
+            <div class="row">
+              <button id="addShare" type="button">Ajouter un dossier…</button>
+              <button id="openTransfers" type="button" class="ghost">Ouvrir les fichiers reçus</button>
+            </div>
+          </section>
+        </div>
+
+        <div class="col">
+          <section class="card" aria-labelledby="remoteTitle">
+            <h2 id="remoteTitle">Contrôler un ordinateur</h2>
+            <form id="connectForm" autocomplete="off">
+              <label class="field">Identifiant du poste distant
+                <input id="remoteId" class="big" inputmode="numeric" placeholder="123 456 789" maxlength="11" required>
+              </label>
+              <label class="field">Mot de passe <span class="muted">(facultatif)</span>
+                <input id="remotePassword" type="password" autocomplete="off">
+              </label>
+              <fieldset class="segmented">
+                <label><input type="radio" name="mode" value="control" checked><span>Prendre le contrôle</span></label>
+                <label><input type="radio" name="mode" value="view"><span>Voir seulement</span></label>
+              </fieldset>
+              <button id="connectBtn" type="submit" class="primary">Se connecter</button>
+            </form>
+            <p id="connectError" class="error" role="alert" hidden></p>
+          </section>
+
+          <section class="card">
+            <h2>Récents</h2>
+            <ul id="recent" class="list"></ul>
+            <p id="noRecent" class="muted">Aucune connexion pour l’instant.</p>
+          </section>
+        </div>
+      </main>
+
+      <!-- ===== Heimdall ===== -->
+      <!-- a floating window above the bottom-right button: the page stays visible behind -->
+      <aside id="panelHeimdall" class="chat-pop" role="dialog" aria-labelledby="heimdallTitle" hidden>
+        <section class="chat-card">
+          <div class="chat-head">
+            <div>
+              <h2 id="heimdallTitle">Heimdall</h2>
+              <p class="muted">Surveille et entretient cet ordinateur. Demande toujours confirmation avant de modifier quoi que ce soit.</p>
+            </div>
+            <div class="chat-tools">
+              <button id="heimdallReset" type="button" class="ghost small" title="Nouvelle conversation">Effacer</button>
+              <button id="heimdallClose" type="button" class="ghost small" aria-label="Fermer Heimdall" title="Fermer">×</button>
+            </div>
+          </div>
+          <p id="heimdallNoKey" class="notice" hidden>
+            Heimdall n’a pas encore de clé API. Ouvrez les <strong>Réglages</strong> pour en ajouter une (le tutoriel Groq Cloud, gratuit, y est expliqué).
+          </p>
+          <div id="chatLog" class="chat-log" aria-live="polite">
+            <p class="muted">Exemples : « vide la corbeille », « vérifie les mises à jour Windows », « combien d’espace libre sur mes disques ? », « qu’est-ce qui ralentit mon PC ? »</p>
+          </div>
+          <form id="chatForm" class="row chat-form" autocomplete="off">
+            <input id="chatInput" placeholder="Écrire à Heimdall…" maxlength="4000">
+            <button id="chatSend" type="submit" class="primary">Envoyer</button>
+          </form>
+          <p id="chatError" class="error" role="alert" hidden></p>
+        </section>
+      </aside>
+
+      <!-- the conversation with the person connected to this PC: lives for one session only -->
+      <aside id="panelTalk" class="chat-pop" role="dialog" aria-labelledby="talkTitle" hidden>
+        <section class="chat-card">
+          <div class="chat-head">
+            <div>
+              <h2 id="talkTitle">Discussion</h2>
+              <p class="muted">Visible seulement par vous et la personne connectée. Elle disparaît à la fin de la session.</p>
+            </div>
+            <div class="chat-tools">
+              <button id="talkClose" type="button" class="ghost small" aria-label="Fermer la discussion" title="Fermer">×</button>
+            </div>
+          </div>
+          <div id="talkLog" class="chat-log" aria-live="polite">
+            <p class="muted">Aucun message pour l’instant.</p>
+          </div>
+          <form id="talkForm" class="row chat-form" autocomplete="off">
+            <input id="talkInput" placeholder="Écrire un message…" maxlength="2000">
+            <button id="talkSend" type="submit" class="primary">Envoyer</button>
+          </form>
+          <p id="talkError" class="error" role="alert" hidden></p>
+        </section>
+      </aside>
+
+      <!-- ===== Réglages ===== -->
+      <main id="panelSettings" class="panel settings-grid" role="tabpanel" hidden>
+        <section class="card">
+          <h2>Serveur</h2>
+          <form id="serverForm" class="row" autocomplete="off">
+            <label class="field grow">Serveur Bifrost
+              <input id="serverInput" placeholder="wss://bifrost.exemple.fr">
+            </label>
+            <button type="submit">Appliquer</button>
+          </form>
+          <p id="serverError" class="error" role="alert" hidden></p>
+          <h3>Serveur sur cet ordinateur</h3>
+          <p class="muted">Pas de serveur à vous ? Cet ordinateur peut faire office de relais Bifrost pour votre réseau. Les autres appareils utilisent l’adresse affichée ci-dessous. Les échanges restent chiffrés de bout en bout ; sur Internet, passez par une redirection de port et un proxy HTTPS.</p>
+          <form id="relayForm" class="row" autocomplete="off">
+            <label class="check grow"><input id="relayEnabled" type="checkbox"> Faire fonctionner le serveur sur cet ordinateur</label>
+            <label class="field">Port <input id="relayPort" type="number" min="1024" max="65535" value="7780"></label>
+            <button type="submit">Appliquer</button>
+          </form>
+          <p id="relayError" class="error" role="alert" hidden></p>
+          <ul id="relayAddresses" class="list"></ul>
+        </section>
+
+        <section class="card">
+          <h2>Application</h2>
+          <label class="field">Votre nom <span class="muted">(montré aux personnes que vous contrôlez)</span>
+            <input id="nameInput" maxlength="40">
           </label>
-          <button type="submit">Appliquer</button>
-        </form>
-        <p id="serverError" class="error" role="alert" hidden></p>
-        <h3>Serveur sur cet ordinateur</h3>
-        <p class="muted">Pas de serveur à vous ? Cet ordinateur peut faire office de relais Bifrost pour votre réseau. Les autres appareils utilisent l'adresse affichée ci-dessous. Les échanges restent chiffrés de bout en bout ; sur Internet, passez par une redirection de port et un proxy HTTPS.</p>
-        <form id="relayForm" class="row" autocomplete="off">
-          <label class="check grow"><input id="relayEnabled" type="checkbox"> Faire fonctionner le serveur sur cet ordinateur</label>
-          <label class="field">Port <input id="relayPort" type="number" min="1024" max="65535" value="7780"></label>
-          <button type="submit">Appliquer</button>
-        </form>
-        <p id="relayError" class="error" role="alert" hidden></p>
-        <ul id="relayAddresses" class="list"></ul>
+          <label class="check"><input id="autostart" type="checkbox"> <span id="autostartLabel">Démarrer Bifrost avec l’ordinateur</span></label>
+          <label class="check"><input id="tray" type="checkbox"> Rester dans la zone de notification quand je ferme la fenêtre</label>
 
-        <label class="field">Votre nom (montré aux personnes que vous contrôlez)
-          <input id="nameInput" maxlength="40">
-        </label>
-        <label class="check"><input id="autostart" type="checkbox"> Démarrer Bifrost avec Windows</label>
-        <label class="check"><input id="tray" type="checkbox"> Rester dans la zone de notification quand je ferme la fenêtre</label>
-        <button id="quit" type="button" class="ghost">Quitter Bifrost (ce PC ne sera plus joignable)</button>
-      </div>
-    </details>
-    <span class="muted">Serveur : <code id="serverUrl"></code> · version <span id="version"></span></span>
-  </footer>
+          <h3>Mises à jour</h3>
+          <label class="check"><input id="autoUpdate" type="checkbox"> Rechercher automatiquement les nouvelles versions (GitHub)</label>
+          <div class="row">
+            <button id="updateCheck" type="button">Rechercher maintenant</button>
+            <span id="updateState" class="muted"></span>
+          </div>
+          <p id="updateError" class="error" role="alert" hidden></p>
+
+          <h3>Quitter</h3>
+          <button id="quit" type="button" class="ghost">Quitter Bifrost (ce PC ne sera plus joignable)</button>
+        </section>
+
+        <section class="card wide">
+          <h2>Heimdall, l’assistant</h2>
+          <p class="muted">Un assistant IA qui peut réaliser des tâches sur <strong>cet</strong> ordinateur (vider la corbeille, vérifier les mises à jour, lire l’espace disque…). Il fonctionne avec <em>votre</em> propre clé API : rien ne passe par un serveur Bifrost.</p>
+          <label class="check"><input id="heimdallEnabled" type="checkbox"> Activer Heimdall</label>
+
+          <div id="heimdallConfig" hidden>
+            <div class="row">
+              <label class="field grow">Fournisseur
+                <select id="heimdallProvider"></select>
+              </label>
+              <label class="field grow">Modèle <span class="muted">(vide = par défaut : <code id="heimdallDefaultModel"></code>)</span>
+                <input id="heimdallModel" maxlength="80" placeholder="modèle par défaut">
+              </label>
+            </div>
+
+            <form id="heimdallKeyForm" class="row" autocomplete="off">
+              <label class="field grow">Clé API
+                <input id="heimdallKey" type="password" autocomplete="off" placeholder="Collez votre clé ici">
+              </label>
+              <button type="submit">Enregistrer la clé</button>
+              <button id="heimdallKeyClear" type="button" class="ghost" hidden>Supprimer la clé</button>
+            </form>
+            <p id="heimdallKeyState" class="muted"></p>
+            <p id="heimdallError" class="error" role="alert" hidden></p>
+
+            <div id="tutorialGroq" class="tutorial">
+              <h3>Obtenir une clé Groq Cloud (gratuite) en 2 minutes</h3>
+              <ol>
+                <li>Cliquez sur <button id="openGroq" type="button" class="link">Ouvrir la page des clés Groq</button> (console.groq.com).</li>
+                <li>Connectez-vous ou créez un compte (e-mail, Google ou GitHub). L’offre gratuite suffit.</li>
+                <li>Cliquez sur <strong>Create API Key</strong>, donnez-lui un nom (par exemple « Bifrost ») puis validez.</li>
+                <li>Copiez la clé affichée : elle commence par <code>gsk_</code> et n’est montrée <strong>qu’une seule fois</strong>.</li>
+                <li>Collez-la dans le champ « Clé API » ci-dessus, puis « Enregistrer la clé ». Le fournisseur par défaut est déjà Groq.</li>
+              </ol>
+            </div>
+            <div id="tutorialOther" class="tutorial" hidden>
+              <h3>Obtenir une clé API</h3>
+              <p class="muted">Créez une clé sur le site du fournisseur, puis collez-la ci-dessus.
+                <button id="openProviderKey" type="button" class="link">Ouvrir la page des clés</button></p>
+            </div>
+            <div id="tutorialCode" class="tutorial" hidden>
+              <h3>Utiliser Claude Code</h3>
+              <p class="muted">Aucune clé à saisir : Heimdall se sert du programme <code>claude</code> déjà installé et connecté sur ce PC
+                (<code>npm install -g @anthropic-ai/claude-code</code>, puis lancer <code>claude</code> une fois pour vous connecter).</p>
+            </div>
+            <p class="muted" id="heimdallSafety">La clé est enregistrée chiffrée par le coffre du système. Heimdall ne peut utiliser que des outils précis, et vous demande confirmation avant toute action qui modifie l’ordinateur.</p>
+          </div>
+        </section>
+      </main>
+
+      <footer class="foot">
+        <span class="muted">Serveur : <code id="serverUrl"></code></span>
+        <span class="muted">version <span id="version"></span></span>
+      </footer>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

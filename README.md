@@ -13,7 +13,7 @@ Prise en main à distance **auto-hébergée** : pas de licence, pas de limite de
 └──────────────┘              └─────────────────┘             └────────────────┘
 ```
 
-## Application de bureau (Windows)
+## Application de bureau (Windows, macOS, Linux)
 
 Un seul programme, comme AnyDesk : une fenêtre **Bifrost** qui sert à la fois de *poste contrôlé* et de *poste contrôleur*.
 
@@ -46,6 +46,51 @@ Particularités à connaître :
 - pas d'installeur : c'est un dossier à copier. Les fichiers PowerShell et l'assistant vidéo doivent rester à côté de `Bifrost.exe` (le paquet n'utilise volontairement pas d'archive asar).
 
 Sécurité de l'application : fenêtres isolées (sandbox, pas de Node.js dans les pages, outils de développement coupés), pages servies par un schéma interne `bifrost://` avec une politique de contenu stricte, navigation et ouverture de fenêtres bloquées, permissions du navigateur limitées au presse-papiers et au plein écran pour la visionneuse, mot de passe transmis une seule fois à la fenêtre de contrôle et jamais mis dans une adresse.
+### Ce qui est propre à chaque système
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| Capture | assistant natif H.264 (repli PowerShell) | Electron, JPEG | Electron, JPEG |
+| Souris / clavier | `SendInput` | CoreGraphics via `osascript` | `xdotool` (X11) |
+| Presse-papiers | assistant PowerShell | Electron | Electron |
+| Droits à accorder | aucun | *Enregistrement de l'écran* + *Accessibilité* | une session X11 et `xdotool` installé |
+| Service avant l'ouverture de session | oui | non | non |
+| Agent en ligne de commande | oui | non (application seulement) | non (application seulement) |
+
+> **Statut des ports macOS et Linux.** Le chemin de capture d'Electron (utilisé hors Windows) est testé de bout en bout sur Windows (`BIFROST_PORTABLE=1`) ; la traduction des entrées (scancodes → touches X11 / CGKeyCode, protocole d'`osascript` et de `xdotool`) est testée à l'unité. **Aucun test n'a eu lieu sur un vrai macOS ou Linux** : attendez-vous à devoir corriger des détails. Voir [INSTALLATION.md §4.5](INSTALLATION.md#45-macos-et-linux).
+
+## Interface
+
+Disposition inspirée de RustDesk (barre de navigation à gauche, votre identifiant d'un côté, la connexion de l'autre) avec la sobriété d'AnyDesk : clair ou sombre selon le système, un seul accent bleu. **Heimdall** (assistant) et **Réglages** sont deux boutons ronds flottants en bas à droite.
+
+Le logo est l'officiel (`desktop/assets/logo-source.jpg`). C'est le seul endroit qui joue l'effet Bifrost : un halo arc-en-ciel autour du logo, une fois, quand une connexion s'établit (vers un autre ordinateur ou depuis un autre vers celui-ci). Désactivé si le système demande de réduire les animations.
+
+**Discussion entre les deux personnes** : pendant une session, un bouton « Discussion » apparaît des deux côtés (dans la barre de la visionneuse, et en bas à droite de la fenêtre de l'ordinateur contrôlé). Les messages passent par le même canal chiffré de bout en bout que l'écran, le relais ne les lit pas ; ils restent **en mémoire seulement** et disparaissent à la fin de la session (rien n'est écrit sur disque). Disponible en « voir seulement » aussi. Si la fenêtre de l'ordinateur contrôlé est cachée ou en arrière-plan, une notification signale le message. 2 000 caractères par message, 20 messages par tranche de 10 s au maximum. Pas de discussion avec l'agent en ligne de commande ni le service Windows (rien pour l'afficher).
+
+Pendant le contrôle, **un seul pointeur** est visible : celui de l'ordinateur distant (déjà dessiné dans la vidéo). Le pointeur local est masqué au-dessus de l'écran distant ; en « voir seulement », il reste affiché.
+
+## Mises à jour automatiques
+
+L'application consulte les *releases* GitHub de `evomerse/bifrost` (au démarrage puis toutes les 6 h ; désactivable dans *Paramètres → Mises à jour*, ou `BIFROST_UPDATE_REPO=propriétaire/dépôt` pour un fork). Quand une version plus récente existe, un bandeau propose **« Installer et redémarrer »** :
+
+1. téléchargement de l'archive de votre système (`Bifrost-<tag>-<système>-<arch>.zip` ou `.tar.gz`) ;
+2. vérification de son empreinte **SHA-256** contre `SHA256SUMS.txt` de la même publication (sans ce fichier, la mise à jour est refusée) ; seules les adresses `https://github.com/<dépôt>/releases/download/…` sont acceptées ;
+3. l'application quitte, un petit script remplace son dossier (l'ancien est restauré en cas d'échec) et la relance. Vos réglages (`%APPDATA%Bifrost`) sont conservés.
+
+Une copie lancée depuis les sources (`npm run desktop`) ne s'installe pas toute seule : le bandeau renvoie vers la page GitHub.
+
+**Publier une version** : mettre à jour `version` dans `package.json`, committer, puis `git tag v0.3.0 && git push origin v0.3.0`. Le workflow `.github/workflows/release.yml` construit Windows, macOS (arm64 et x64) et Linux, calcule `SHA256SUMS.txt` et crée la release. Les paquets ne sont **pas signés** : l'empreinte protège d'un téléchargement corrompu, pas d'un dépôt compromis.
+
+## Heimdall, l'assistant IA
+
+*Paramètres → Heimdall → Activer* fait apparaître un onglet de discussion. Heimdall comprend des demandes comme « vide la corbeille », « vérifie les mises à jour Windows », « combien reste-t-il sur mes disques ? » et agit sur **l'ordinateur où l'application tourne**.
+
+- **Fournisseurs** : Groq Cloud (gratuit, par défaut ; tutoriel intégré aux paramètres), ChatGPT (OpenAI), Grok (xAI), Gemini (Google), Claude (Anthropic), ou **Claude Code** (le programme `claude` installé sur le PC, sans clé). Chaque fournisseur a son modèle par défaut, modifiable.
+- **Votre clé, votre compte** : les requêtes partent directement de votre PC vers le fournisseur choisi, jamais par le relais Bifrost. La clé est chiffrée par le coffre du système (DPAPI, Trousseau, libsecret) ; sans coffre disponible elle est stockée en clair et l'interface le dit.
+- **Des outils précis, pas un accès libre** : `system_info`, `disk_usage`, `top_processes`, `check_updates` (lecture seule, sans confirmation) ; `empty_trash`, `clean_temp_files` et `run_command` demandent **à chaque fois** votre accord dans une fenêtre native du programme, avec le texte exact de ce qui va être fait. La page web et le modèle ne peuvent pas répondre à votre place.
+- La conversation reste en mémoire seulement (« Nouvelle conversation » l'efface). Ce que Heimdall voit d'une commande (sa sortie) est envoyé au fournisseur : n'activez pas `run_command` pour des données sensibles.
+- Avec **Claude Code**, Heimdall ne passe pas par les appels d'outils de l'API : il demande au modèle un bloc JSON décrivant l'outil, qu'il exécute avec les mêmes confirmations.
+
 ## Démarrage rapide (test en local, sans l'application)
 
 Prérequis : Node 20+ (testé avec Node 24), Windows pour l'agent.
@@ -203,7 +248,7 @@ Poignée de main en JSON clair (rien de secret n'y circule), puis **tout est chi
 - **Cadence** : environ 25 images/s à 1080p. Le plafond est la copie d'écran GDI (~30 ms par image sur un écran 1440p) ; le passer au-dessus de 30 demande la capture par DXGI Desktop Duplication, non faite.
 - **Décodage H.264 vérifié dans Chromium (Electron 44 / Chrome 152) seulement** : l'application de bureau l'a fait fonctionner en conditions réelles (image 1920×1080 décodée par WebCodecs, couleurs plausibles, permissions et fichiers via la page). Chrome, Edge et Opera partagent ce moteur ; Firefox et Safari n'ont pas été essayés et retombent automatiquement en JPEG si WebCodecs ou le profil H.264 leur manque. Les couleurs supposent la matrice BT.709 sans en-tête VUI.
 - **Pas de WebRTC** : le transport reste le relais WebSocket (TCP) : pas de pair-à-pair, pas de contrôle de congestion propre à la vidéo en temps réel. Le gain de fluidité vient du codec H.264, pas du transport.
-- **Pas encore** : images ou fichiers dans le presse-papiers (texte seulement), explorateur de fichiers sur tout le disque, son, chat, impression, mobile, Linux/macOS (l'application de bureau et l'agent sont Windows seulement), installeur signé, mise à jour automatique.
+- **Pas encore** : images ou fichiers dans le presse-papiers (texte seulement), explorateur de fichiers sur tout le disque, son, chat, impression, mobile, installeur signé ; sur macOS et Linux : H.264 (JPEG seulement), service avant l'ouverture de session, agent en ligne de commande, Wayland (pas d'injection d'entrées).
 - **Le service SYSTEM n'a été testé qu'en partie** : compilation, installation par étapes, supervision (démarrage, relance, nettoyage d'un agent orphelin) et lancement via duplication de jeton, avec vos propres droits. Le suivi du bureau sécurisé (écran de verrouillage, UAC) et l'exécution réelle en SYSTEM n'ont pas pu être exercés sans droits administrateur : suivez la liste « À vérifier » ci-dessus.
 - **Un service SYSTEM avec accès sans surveillance est un accès total à la machine** : la sécurité repose sur le mot de passe (12 caractères minimum, blocage 5 min après 5 échecs) et sur le serveur relais. Mot de passe long et unique, serveur en HTTPS.
 - Ctrl+Alt+Suppr ne peut pas être envoyé à distance pour l'instant (il faut appeler `SendSAS` depuis le service et régler la stratégie `SoftwareSASGeneration`, non fait).
@@ -213,12 +258,13 @@ Poignée de main en JSON clair (rien de secret n'y circule), puis **tout est chi
 ## Tests
 
 ```powershell
-npm test                               # 128 tests : crypto, serveur, session, fichiers, interface, assistant natif, scripts PowerShell, service
-$env:BIFROST_E2E='1'; npm test         # 133 tests : + bout en bout et application de bureau réelle (Electron)
+npm test                               # crypto, serveur, session, fichiers, interface, assistant natif, scripts PowerShell, service,
+                                       # entrées macOS/Linux, mises à jour, Heimdall
+$env:BIFROST_E2E='1'; npm test         # + bout en bout et application de bureau réelle (Electron), dont le chemin de capture portable
                                        #   hôte + visionneuse dans un vrai Chromium : H.264, mot de passe, accord,
                                        #   code de vérification, bandeau, fichiers, relais intégré (affiche brièvement le bandeau)
 ```
 
 ## Structure
 
-`server/` annuaire + relais + fichiers statiques · `agent/` agent hôte, helpers PowerShell et gestion du service · `service/BifrostService.cs` hôte de service Windows (superviseur) · `native/` assistant de capture et d'encodage H.264 (C#) · `shared/auth.js` dérivation du mot de passe, identifiants · `shared/e2e.js` chiffrement de bout en bout (Node et navigateur) · `viewer/` page de contrôle (site et application) · `desktop/` application de bureau Electron (fenêtres, icônes) · `scripts/` construction du paquet · `test/`
+`server/` annuaire + relais + fichiers statiques · `agent/` agent hôte, helpers PowerShell et gestion du service · `service/BifrostService.cs` hôte de service Windows (superviseur) · `native/` assistant de capture et d'encodage H.264 (C#) · `shared/auth.js` dérivation du mot de passe, identifiants · `shared/e2e.js` chiffrement de bout en bout (Node et navigateur) · `viewer/` page de contrôle (site et application) · `desktop/` application de bureau Electron (fenêtres, icônes, `updater.mjs` mises à jour GitHub, `heimdall/` assistant IA, `capture-electron.mjs` capture macOS/Linux) · `agent/helpers-portable.js` + `agent/input-portable.js` helpers macOS/Linux · `scripts/` construction du paquet · `test/`

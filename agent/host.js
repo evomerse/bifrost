@@ -13,13 +13,15 @@ import { PasswordGuard, Session } from './session.js';
  * @param {string}   o.cfgFile      where it is saved
  * @param {object}   o.helpers      OS helpers (capture, input, clipboard, consent dialog, indicator)
  * @param {boolean} [o.serviceMode] running as the SYSTEM service
+ * @param {boolean} [o.chat]        offer the text chat (needs a UI listening to {type:'chat'} events)
  * @param {(m:string)=>void} [o.log]
  * @param {(e:object)=>void} [o.onEvent] status events for a UI:
  *     {type:'status', status:'connecting'|'online'|'offline', server, id}
  *     {type:'session', phase:'incoming'|'ended', ip?, reason?}
- * @returns {{ stop(), reconnect(), endSession(reason?), readonly status, readonly session }}
+ *     {type:'chat', text, name}   a line typed by the person on the other side
+ * @returns {{ stop(), reconnect(), endSession(reason?), sendChat(text), readonly status, readonly session }}
  */
-export function startHost({ cfg, cfgFile, helpers, serviceMode = false, log = () => {}, onEvent = () => {} }) {
+export function startHost({ cfg, cfgFile, helpers, serviceMode = false, chat = false, log = () => {}, onEvent = () => {} }) {
   const guard = new PasswordGuard();
   let ws = null;
   let session = null;
@@ -64,6 +66,8 @@ export function startHost({ cfg, cfgFile, helpers, serviceMode = false, log = ()
           send: (m) => sock.readyState === WebSocket.OPEN && sock.send(JSON.stringify(m)),
           sendBinary: (b) => sock.readyState === WebSocket.OPEN && sock.send(b, { binary: true }),
           bufferedAmount: () => sock.bufferedAmount,
+          chat,
+          onChat: chat ? (text, name) => onEvent({ type: 'chat', text, name }) : undefined,
           onEnd: (reason) => {
             if (session === s) session = null;
             onEvent({ type: 'session', phase: 'ended', ip: s.peerIp, reason });
@@ -155,6 +159,11 @@ export function startHost({ cfg, cfgFile, helpers, serviceMode = false, log = ()
       backoff = 1000;
       rerolls = 0;
       connect();
+    },
+
+    /** Sends a chat line to the person connected. False when there is no active session. */
+    sendChat(text) {
+      return session?.sendChat(text) ?? false;
     },
 
     /** Ends the running remote session, if any (the person at this PC clicked Stop). */

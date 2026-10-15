@@ -1,7 +1,12 @@
 name: Release
 
-# Declenchee en poussant un tag, par exemple :  git tag v0.2.0 && git push origin v0.2.0
-# Construit le paquet Windows (dist/Bifrost-win32-x64) et le joint a une release GitHub.
+# Declenchee en poussant un tag, par exemple :  git tag v0.3.0 && git push origin v0.3.0
+# Construit Bifrost pour Windows, macOS et Linux, joint les archives a une release GitHub avec
+# SHA256SUMS.txt : c'est ce que l'application consulte pour proposer la mise a jour.
+#
+# Noms des fichiers (lus par desktop/updater.mjs) :
+#   Bifrost-<tag>-win32-x64.zip   Bifrost-<tag>-darwin-arm64.tar.gz
+#   Bifrost-<tag>-darwin-x64.tar.gz   Bifrost-<tag>-linux-x64.tar.gz
 on:
   push:
     tags: ['v*']
@@ -10,8 +15,16 @@ permissions:
   contents: write
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, platform: win32, arch: x64 }
+          - { os: ubuntu-latest, platform: linux, arch: x64 }
+          - { os: macos-latest, platform: darwin, arch: arm64 }
+          - { os: macos-latest, platform: darwin, arch: x64 }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -22,24 +35,58 @@ jobs:
 
       - run: npm ci
 
+      # Les tests du service et des assistants natifs sont propres a Windows.
       - name: Tests
+        if: matrix.platform == 'win32'
         run: npm test
 
-      - name: Build
-        run: npm run dist
+      - name: Tests (portables)
+        if: matrix.platform != 'win32'
+        run: node --test test/portable.test.js test/heimdall.test.js test/updater.test.js test/auth.test.js test/crypto.test.js test/e2e.test.js test/server.test.js
 
-      - name: Zip
+      - name: Build
+        run: npm run dist -- --platform=${{ matrix.platform }} --arch=${{ matrix.arch }}
+
+      - name: Archive (zip)
+        if: matrix.platform == 'win32'
         shell: pwsh
         run: |
-          $name = "Bifrost-${{ github.ref_name }}-win32-x64.zip"
-          Compress-Archive -Path dist/Bifrost-win32-x64 -DestinationPath $name
-          "ASSET=$name" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $name = "Bifrost-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip"
+          Compress-Archive -Path "dist/Bifrost-${{ matrix.platform }}-${{ matrix.arch }}" -DestinationPath $name
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Move-Item $name out/
+
+      - name: Archive (tar.gz)
+        if: matrix.platform != 'win32'
+        shell: bash
+        run: |
+          name="Bifrost-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz"
+          mkdir -p out
+          tar -czf "out/$name" -C dist "Bifrost-${{ matrix.platform }}-${{ matrix.arch }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bifrost-${{ matrix.platform }}-${{ matrix.arch }}
+          path: out/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Empreintes SHA-256
+        working-directory: out
+        run: sha256sum Bifrost-* > SHA256SUMS.txt && cat SHA256SUMS.txt
 
       - name: Publish release
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" $env:ASSET `
-            --title "Bifrost ${{ github.ref_name }}" `
+          gh release create "${{ github.ref_name }}" out/* \
+            --repo "${{ github.repository }}" \
+            --title "Bifrost ${{ github.ref_name }}" \
             --generate-notes

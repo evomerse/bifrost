@@ -395,6 +395,22 @@ Désinstallation : `node agent/agent.js service uninstall` (ajoutez `--purge` po
 
 ---
 
+### 4.5 macOS et Linux
+
+L'application de bureau fonctionne aussi sur macOS et Linux (voir le tableau du README). Construction : `npm install` puis `npm run dist` **sur la machine cible** (ou `npm run dist -- --platform=darwin --arch=arm64`) ; les paquets des releases GitHub suivent le même principe.
+
+**macOS** (12 ou plus)
+1. Au premier lancement, accordez à Bifrost **Réglages Système → Confidentialité et sécurité → Enregistrement de l'écran** (pour être vu) et **Accessibilité** (pour être contrôlé), puis relancez l'application.
+2. L'application n'est pas signée : clic droit → *Ouvrir*, ou `xattr -cr Bifrost.app`.
+3. Un contrôleur Windows/Linux envoie **Ctrl** pour ses raccourcis : sur le Mac, Bifrost le traduit en **Commande** (Ctrl+C copie, Ctrl+V colle).
+
+**Linux**
+1. Une session **X11** (pas Wayland) et le paquet `xdotool` : `sudo apt install xdotool`. Sous Wayland l'écran peut être vu (portail PipeWire) mais la souris et le clavier ne peuvent pas être pilotés ; connectez-vous à une session « Xorg ».
+2. Zone de notification : une extension d'icônes d'état est nécessaire sous GNOME.
+3. Le démarrage automatique crée `~/.config/autostart/bifrost.desktop`.
+
+Ces deux systèmes n'ont pas pu être essayés pendant le développement (voir le README) : signalez ce qui ne va pas.
+
 ## 5. Procédure de connexion
 
 ### 5.1 Rôles
@@ -548,7 +564,7 @@ sudo cp /var/lib/bifrost/ids.json ~/ids.json.$(date +%F)
 
 ### Mettre à jour les postes
 
-Il n'y a pas de mise à jour automatique. Sur chaque poste : *Quitter Bifrost*, remplacez le dossier par la nouvelle version (votre identifiant et vos réglages sont dans `%APPDATA%\Bifrost` et sont conservés), relancez.
+L'application propose elle-même les nouvelles versions publiées sur GitHub (bandeau **« Installer et redémarrer »**, voir le README). Vous pouvez aussi mettre à jour à la main : *Quitter Bifrost*, remplacez le dossier par la nouvelle version (votre identifiant et vos réglages sont dans `%APPDATA%\Bifrost` et sont conservés), relancez. Pour que les postes voient une version, publiez-la avec un tag `vX.Y.Z` (workflow `release.yml`).
 
 ### Désinstaller un poste
 

@@ -1,5 +1,7 @@
-// Builds the distributable desktop app:  npm run dist
+// Builds the distributable desktop app:  npm run dist [-- --platform=win32|darwin|linux --arch=x64|arm64]
 //   -> dist/Bifrost-win32-x64/Bifrost.exe   (a folder: zip it, or run the .exe in place)
+//   -> dist/Bifrost-darwin-arm64/Bifrost.app, dist/Bifrost-linux-x64/Bifrost
+// By default it builds for the machine it runs on.
 //
 // asar is off on purpose: the host starts PowerShell scripts and a helper .exe, and external
 // processes cannot read files inside an asar archive.
@@ -27,20 +29,33 @@ const EXCLUDE = [
   /^\/desktop\/assets\/logo-source\.jpg$/,
 ];
 
+const arg = (name, fallback) => {
+  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
+  return hit ? hit.slice(name.length + 3) : fallback;
+};
+const platform = arg('platform', process.platform);
+const arch = arg('arch', process.arch);
+if (!['win32', 'darwin', 'linux'].includes(platform) || !['x64', 'arm64'].includes(arch)) {
+  throw new Error(`unsupported target ${platform}-${arch}`);
+}
+// .ico on Windows; macOS (.icns) and Linux get Electron's default file icon: the windows set
+// their own icon at run time.
+const icon = platform === 'win32' ? path.join(ROOT, 'desktop', 'assets', 'icon.ico') : undefined;
+
 const paths = await packager({
   dir: ROOT,
   out: path.join(ROOT, 'dist'),
   name: 'Bifrost',
   executableName: 'Bifrost',
-  platform: 'win32',
-  arch: 'x64',
+  platform,
+  arch,
   appVersion: pkg.version,
-  icon: path.join(ROOT, 'desktop', 'assets', 'icon.ico'),
+  icon,
   asar: false,
   prune: true,
   overwrite: true,
   ignore: (file) => EXCLUDE.some((re) => re.test(file)),
-  win32metadata: {
+  win32metadata: platform !== 'win32' ? undefined : {
     CompanyName: 'Bifrost',
     FileDescription: 'Bifrost - prise en main a distance',
     ProductName: 'Bifrost',

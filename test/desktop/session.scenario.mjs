@@ -55,10 +55,12 @@ export async function run(ctx) {
 
   // 2. the viewer window, started like the "Se connecter" button does
   const win = ctx.openViewer({ id: cfg.id, password: 'desktop-test-password', mode: 'control', label: 'test' });
-  const page = (expr) => win.webContents.executeJavaScript(expr);
+  const page = (expr, gesture = false) => win.webContents.executeJavaScript(expr, gesture);
 
   await until(async () => (await page("document.getElementById('stage') && !document.getElementById('stage').hidden")), 'viewer stage shown');
   check('session_accepted_with_password', true);
+  // while controlling, only the host's own pointer is seen
+  check('local_pointer_hidden_while_controlling', await page(`getComputedStyle(document.getElementById('screen')).cursor === 'none'`));
   check('password_not_kept', ctx.viewerParams.get(win.webContents.id)?.params.password === '');
 
   // 3. H.264 frames decoded by WebCodecs into the canvas
@@ -148,12 +150,66 @@ export async function run(ctx) {
   })()`);
   check('clipboard_permissions_granted_to_viewer', perms.read === 'granted' && perms.write === 'granted', perms);
 
-  // 8. ending from the host side tells the viewer
+  // 7b. chat between the two people, end-to-end, gone with the session
+  const main = ctx.mainWindow;
+  const mainPage = (expr) => main.webContents.executeJavaScript(expr);
+  check('chat_button_offered_by_host', await until(async () => page(`!document.getElementById('talkBtn').hidden`), 'chat button in the viewer'));
+  await page(`document.getElementById('talkBtn').click()`);
+  await page(`(() => {
+    document.getElementById('talkInput').value = 'Bonjour depuis la visionneuse';
+    document.getElementById('talkForm').requestSubmit();
+  })()`);
+  const heard = await until(() => ctx.state().chat.find((m) => m.from === 'peer'), 'host receives the chat line');
+  check('chat_viewer_to_host', heard.text === 'Bonjour depuis la visionneuse', heard);
+  check('chat_peer_name_shown', heard.name === 'test', heard.name);
+  check(
+    'chat_button_in_host_window',
+    await until(async () => mainPage(`!document.getElementById('tabTalk').hidden && document.getElementById('talkBadge').textContent === '1'`), 'host chat button with a badge'),
+  );
+  await mainPage(`document.getElementById('tabTalk').click()`);
+  check('chat_host_window_shows_line', await mainPage(`document.getElementById('talkLog').textContent.includes('Bonjour depuis la visionneuse')`));
+  await mainPage(`(() => {
+    document.getElementById('talkInput').value = 'Bien reçu, je regarde';
+    document.getElementById('talkForm').requestSubmit();
+  })()`);
+  await until(async () => page(`document.getElementById('talkLog').textContent.includes('Bien reçu, je regarde')`), 'viewer receives the reply');
+  check('chat_host_to_viewer', true);
+  check(
+    'chat_viewer_shows_both_sides',
+    await page(`document.querySelectorAll('#talkLog .msg.me').length === 1 && document.querySelectorAll('#talkLog .msg.peer').length === 1`),
+  );
+  await mainPage(`document.getElementById('talkClose').click()`);
+
+  // 8. ending from the host side tells the viewer, and the window is not left stuck. The case
+  //    that used to freeze the window: the session ends while the viewer is full screen.
+  win.show();
+  await page(`document.getElementById('stage').requestFullscreen().then(() => true)`, true).catch(() => {});
+  const wasFullscreen = await until(async () => page('Boolean(document.fullscreenElement)'), 'viewer full screen');
+  check('viewer_was_full_screen', wasFullscreen);
   ctx.host.endSession();
   const ended = await until(async () => page(`!document.getElementById('stage').hidden === false`), 'viewer back to the card');
   check('host_can_end_session', ended);
+  // the conversation is wiped with the session, on both sides
+  check('chat_wiped_on_host', ctx.state().chat.length === 0, ctx.state().chat);
+  check('chat_button_gone_on_host', await until(async () => mainPage(`document.getElementById('tabTalk').hidden && document.getElementById('talkLog').querySelectorAll('.msg').length === 0`), 'host chat cleared'));
+  check('chat_wiped_in_viewer', await page(`document.getElementById('talkLog').querySelectorAll('.msg').length === 0 && document.getElementById('talkBtn').hidden`));
+  const after = await page(`(() => ({
+    status: document.getElementById('status').textContent,
+    actions: !document.getElementById('endedActions').hidden,
+    again: !document.getElementById('again').hidden,
+    close: !document.getElementById('closeWin').hidden,
+    countdown: document.getElementById('countdown').textContent,
+    fullscreen: Boolean(document.fullscreenElement),
+  }))()`);
+  check('end_message_shown', /terminée par l.ordinateur distant/.test(after.status), after.status);
+  check('end_offers_reconnect_and_close', after.actions && after.again && after.close, after);
+  check('end_countdown_running', /ferme dans \d+ s/.test(after.countdown), after.countdown);
+  check('end_not_left_fullscreen', after.fullscreen === false && win.isFullScreen() === false, { doc: after.fullscreen, win: win.isFullScreen() });
+  // the close button must really close the window (it used to rely on window.close())
+  await page(`document.getElementById('closeWin').click()`);
+  await until(() => win.isDestroyed(), 'viewer window closed by its button');
+  check('close_button_closes_window', win.isDestroyed());
 
-  win.destroy();
   await relay.close();
   result.failed = Object.entries(result.checks).filter(([, v]) => !(v === true || v?.ok === true)).map(([k]) => k);
   result.error = result.failed.length ? `failed checks: ${result.failed.join(', ')}` : undefined;

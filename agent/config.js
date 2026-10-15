@@ -3,9 +3,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { deriveKey, idFromSecret, randomB64, toB64, PBKDF2_ITERATIONS } from '../shared/auth.js';
 
+/** Per-user settings folder of this OS: %APPDATA%, ~/Library/Application Support, $XDG_CONFIG_HOME. */
+export function userConfigBase(platform = process.platform, env = process.env, home = os.homedir()) {
+  if (env.APPDATA) return env.APPDATA;
+  if (platform === 'darwin') return path.join(home, 'Library', 'Application Support');
+  return env.XDG_CONFIG_HOME || path.join(home, '.config');
+}
+
 export function configPath() {
-  const base = process.env.APPDATA ?? path.join(os.homedir(), '.config');
-  return path.join(base, 'Bifrost', 'agent.json');
+  return path.join(userConfigBase(), 'Bifrost', 'agent.json');
 }
 
 /** Machine-wide data directory used by the Windows service (BIFROST_DATA_DIR overrides, for tests). */

@@ -6,7 +6,9 @@ export const VIEWER_FILES = new Map([
   ['/viewer.js', ['viewer/viewer.js', 'text/javascript; charset=utf-8']],
   ['/transfer.js', ['viewer/transfer.js', 'text/javascript; charset=utf-8']],
   ['/extras.js', ['viewer/extras.js', 'text/javascript; charset=utf-8']],
+  ['/chat.js', ['viewer/chat.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['viewer/style.css', 'text/css; charset=utf-8']],
+  ['/logo.png', ['viewer/logo.png', 'image/png']],
   ['/shared/auth.js', ['shared/auth.js', 'text/javascript; charset=utf-8']],
   ['/shared/e2e.js', ['shared/e2e.js', 'text/javascript; charset=utf-8']],
 ]);

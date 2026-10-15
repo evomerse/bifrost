@@ -11,6 +11,7 @@ import {
   unpackFrameBody,
   unpackVideoBody,
 } from '/shared/e2e.js';
+import { createChat } from '/chat.js';
 import { createExtras } from '/extras.js';
 
 const $ = (id) => document.getElementById(id);
@@ -19,6 +20,7 @@ const statusEl = $('status');
 const canvas = $('screen');
 const ctx = canvas.getContext('2d');
 const extras = createExtras($);
+const chat = createChat($);
 
 const MODS = new Set(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight']);
 const BUTTONS = { 0: 'l', 1: 'm', 2: 'r' };
@@ -102,10 +104,40 @@ function relayUrl() {
   return `${proto}://${location.host}/ws`;
 }
 
-if (desktop) {
-  $('closeWin').hidden = false;
-  $('closeWin').addEventListener('click', () => window.close());
+/** Closes this window: through the desktop app (reliable), else the browser's own call. */
+function closeWindow() {
+  if (typeof desktop?.close === 'function') desktop.close();
+  else window.close();
 }
+$('closeWin').addEventListener('click', closeWindow);
+
+// After a clean end in the desktop app the window closes by itself; "Se reconnecter" cancels it.
+let closeTimer = null;
+function cancelCountdown() {
+  clearTimeout(closeTimer);
+  closeTimer = null;
+  $('countdown').hidden = true;
+}
+function startCountdown(seconds) {
+  let left = seconds;
+  const tick = () => {
+    $('countdown').hidden = false;
+    $('countdown').textContent = `Cette fenêtre se ferme dans ${left} s.`;
+    if (left <= 0) return closeWindow();
+    left -= 1;
+    closeTimer = setTimeout(tick, 1000);
+    return undefined;
+  };
+  tick();
+}
+$('again').addEventListener('click', () => {
+  cancelCountdown();
+  $('endedActions').hidden = true;
+  form.hidden = false;
+  setStatus('');
+  $('password').focus();
+});
+
 
 form.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -137,8 +169,12 @@ function start(id) {
   finished = false;
   active = false;
   challenge = null;
+  cancelCountdown();
+  $('endedActions').hidden = true;
+  $('beacon').hidden = false;
   mode = form.elements.mode.value === 'view' ? 'view' : 'control';
   e2e = new ViewerE2E({ id, password: $('password').value });
+  chat.start({ sendJson: sendSecure });
   extras.start({
     sendJson: sendSecure,
     sendChunk: (tid, last, bytes) => sendSecureKind(KIND_FILE, packFileBody(tid, last, bytes)),
@@ -224,6 +260,8 @@ async function onSecure(packet) {
       mode = msg.mode === 'control' ? 'control' : 'view';
       $('barStatus').textContent =
         (mode === 'control' ? 'Contrôle à distance' : 'Lecture seule') + (e2e.usedPassword ? '' : ` · code ${spaced(e2e.sas)}`);
+      $('beacon').hidden = true;
+      canvas.classList.toggle('remote-pointer', mode === 'control');
       showStage(true);
       break;
     case 'denied':
@@ -236,7 +274,7 @@ async function onSecure(packet) {
       showMonitors(msg);
       break;
     default:
-      extras.onJson(msg); // perm, clip, fs-*
+      if (!chat.onJson(msg)) extras.onJson(msg); // chat; perm, clip, fs-*
   }
 }
 
@@ -274,16 +312,42 @@ monitorSel.addEventListener('change', () => {
 function finish(text, isError = false) {
   if (finished) return;
   finished = true;
-  releaseAll();
-  closeDecoder();
-  extras.stop();
+  const wasActive = active;
+  // Each step is isolated: one failing cleanup must never leave the window stuck on the stage.
+  const safely = (fn) => {
+    try {
+      fn();
+    } catch {
+      /* keep going */
+    }
+  };
+  safely(releaseAll);
+  safely(closeDecoder);
+  safely(() => extras.stop());
+  safely(() => chat.stop());
+  safely(() => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  });
   monitorSel.hidden = true;
   monitorSel.replaceChildren();
   active = false;
+  canvas.classList.remove('remote-pointer');
+  $('beacon').hidden = true;
   showStage(false);
   $('go').disabled = false;
   $('password').value = '';
   if (text) setStatus(text, isError);
+  if (desktop) {
+    // The connection form is hidden in the desktop app (the main window already asked).
+    $('endedActions').hidden = false;
+    if (wasActive && !isError) {
+      $('again').hidden = false;
+      startCountdown(8);
+    } else {
+      form.hidden = false; // wrong password, host offline...: another try right here
+      $('again').hidden = true;
+    }
+  }
   const socket = ws;
   ws = null;
   e2e = null;

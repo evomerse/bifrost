@@ -4,11 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bifrost</title>
+  <link rel="icon" href="/logo.png" type="image/png">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <main id="connect" class="card">
-    <h1>Bifrost</h1>
+    <header class="brand">
+      <img src="/logo.png" alt="" width="44" height="44">
+      <div>
+        <h1>Bifrost</h1>
+      </div>
+    </header>
     <p class="muted">Prise en main à distance. Saisissez l’identifiant affiché par l’agent sur l’autre ordinateur.</p>
 
     <form id="form" autocomplete="off">
@@ -27,20 +33,28 @@
       </fieldset>
       <button id="go" type="submit">Se connecter</button>
     </form>
+
+    <div id="beacon" class="beacon" hidden aria-hidden="true"><span></span></div>
     <p id="status" role="status" class="status"></p>
-    <button id="closeWin" type="button" hidden>Fermer cette fenêtre</button>
+    <p id="countdown" class="muted" hidden></p>
+    <div id="endedActions" class="actions" hidden>
+      <button id="again" type="button">Se reconnecter</button>
+      <button id="closeWin" type="button" class="ghost">Fermer cette fenêtre</button>
+    </div>
   </main>
 
   <section id="stage" hidden>
     <div id="bar">
+      <img src="/logo.png" alt="" width="26" height="26">
       <span id="barStatus">Connecté</span>
       <span class="spacer"></span>
       <select id="monitorSel" aria-label="Écran distant affiché" title="Écran distant affiché" hidden></select>
       <button id="clipPending" type="button" hidden>Copier le presse-papiers distant</button>
       <button id="clipBtn" type="button" aria-pressed="true" hidden>Presse-papiers : synchronisé</button>
+      <button id="talkBtn" type="button" aria-expanded="false" aria-controls="talkPanel" hidden>Discussion <span id="talkBadge" class="badge" hidden></span></button>
       <button id="filesBtn" type="button" aria-expanded="false" hidden>Fichiers</button>
       <button id="fs" type="button">Plein écran</button>
-      <button id="stop" type="button">Déconnecter</button>
+      <button id="stop" type="button" class="danger">Déconnecter</button>
     </div>
     <canvas id="screen" tabindex="0"></canvas>
 
@@ -58,6 +72,18 @@
       <ul id="entries"></ul>
       <h3>Transferts</h3>
       <ul id="transferList"></ul>
+    </aside>
+    <aside id="talkPanel" hidden aria-label="Discussion">
+      <header>
+        <strong>Discussion</strong>
+        <button id="talkClose" type="button" aria-label="Fermer la discussion">×</button>
+      </header>
+      <p class="muted">Visible seulement par vous et la personne en face. Effacée à la fin de la session.</p>
+      <div id="talkLog" aria-live="polite"></div>
+      <form id="talkForm" autocomplete="off">
+        <input id="talkInput" maxlength="2000" placeholder="Écrire un message…" aria-label="Message">
+        <button id="talkSend" type="submit">Envoyer</button>
+      </form>
     </aside>
     <div id="dropHint" hidden>Déposez les fichiers pour les envoyer</div>
   </section>

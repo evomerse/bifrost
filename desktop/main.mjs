@@ -7,12 +7,18 @@
 //
 // The host logic is agent/host.js, shared with the command-line agent and the Windows service.
 
-import { app, BrowserWindow, Menu, Tray, clipboard, dialog, ipcMain, nativeImage, protocol, screen, session, shell } from 'electron';
+import electron, { app, BrowserWindow, Menu, Notification, Tray, clipboard, desktopCapturer, dialog, ipcMain, nativeImage, protocol, safeStorage, screen, session, shell } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createWindowsHelpers } from '../agent/helpers.js';
+import { createPortableHelpers } from '../agent/helpers-portable.js';
+import { createElectronCapture } from './capture-electron.mjs';
+import { createHeimdall } from './heimdall/assistant.js';
+import { EXTERNAL_LINKS, PROVIDERS, providerInfo } from './heimdall/providers.js';
+import { createSecretStore } from './heimdall/secrets.js';
+import { Updater } from './updater.mjs';
 import { startHost } from '../agent/host.js';
 import { buildPermissions } from '../agent/permissions.js';
 import { clearPassword, configPath, ensureIdentity, loadConfig, normalizeServerUrl, saveConfig, setPassword } from '../agent/config.js';
@@ -37,6 +43,9 @@ const UI_FILES = new Map(
     ['/consent.js', 'text/javascript; charset=utf-8'],
     ['/indicator.html', 'text/html; charset=utf-8'],
     ['/indicator.js', 'text/javascript; charset=utf-8'],
+    ['/capture.html', 'text/html; charset=utf-8'],
+    ['/capture.js', 'text/javascript; charset=utf-8'],
+    ['/logo.png', 'image/png'],
   ].map(([p, type]) => [p, [path.join('desktop', 'ui', p), type]]),
 );
 
@@ -54,12 +63,29 @@ const CFG_FILE = path.join(HOME, 'agent.json');
 const SETTINGS_FILE = path.join(HOME, 'desktop.json');
 
 let cfg = null;
-let settings = { name: '', recent: [], minimizeToTray: true, runRelay: false, relayPort: 7780 };
+let settings = {
+  name: '',
+  recent: [],
+  minimizeToTray: true,
+  runRelay: false,
+  relayPort: 7780,
+  autoUpdate: true,
+  heimdall: { enabled: false, provider: 'groq', model: '', keys: {} },
+};
+// Windows keeps its native helpers; macOS and Linux (or BIFROST_PORTABLE=1) use Electron's capture.
+const PORTABLE = process.platform !== 'win32' || process.env.BIFROST_PORTABLE === '1';
+const secrets = createSecretStore(safeStorage);
+let update = { status: 'idle', version: '', notes: '', progress: 0, error: '', canInstall: false, pageUrl: '', checkedAt: 0 };
+let updater = null;
 let relay = null;
 let relayError = '';
 let host = null;
 let hostStatus = 'connecting';
 let sessionInfo = null; // { ip, phase: 'incoming' | 'active' }
+// Chat with the person connected to this PC. Memory only, emptied whenever a session starts or
+// ends: nothing of a conversation survives its session.
+const MAX_CHAT_MESSAGES = 200;
+let chatMessages = []; // { from: 'me' | 'peer', text, name?, ts }
 let mainWindow = null;
 let tray = null;
 let quitting = false;
@@ -70,7 +96,8 @@ const log = (m) => {
 
 function loadSettings() {
   try {
-    settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
+    const saved = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    settings = { ...settings, ...saved, heimdall: { ...settings.heimdall, ...(saved.heimdall ?? {}) } };
   } catch {
     /* first run */
   }
@@ -95,10 +122,30 @@ function uiState() {
     name: settings.name,
     recent: settings.recent,
     minimizeToTray: settings.minimizeToTray,
-    autostart: TEST_MODE ? false : app.getLoginItemSettings().openAtLogin,
+    autostart: TEST_MODE ? false : getAutostart(),
     session: sessionInfo,
+    chat: chatMessages,
     relay: { enabled: Boolean(settings.runRelay), running: Boolean(relay), port: settings.relayPort, error: relayError, addresses: relayAddresses() },
     version: app.getVersion(),
+    platform: process.platform,
+    autoUpdate: settings.autoUpdate,
+    update,
+    heimdall: heimdallState(),
+  };
+}
+
+function heimdallState() {
+  const h = settings.heimdall;
+  const p = providerInfo(h.provider);
+  return {
+    enabled: Boolean(h.enabled),
+    provider: p.id,
+    model: h.model || '',
+    defaultModel: p.defaultModel,
+    noKey: Boolean(p.noKey),
+    hasKey: Boolean(p.noKey) || Boolean(secrets.open(h.keys?.[p.id])),
+    keyProtected: secrets.encrypted,
+    providers: Object.values(PROVIDERS).map(({ id, label, defaultModel, keyUrl, noKey }) => ({ id, label, defaultModel, keyUrl, noKey: Boolean(noKey) })),
   };
 }
 
@@ -136,6 +183,33 @@ async function applyRelay() {
     settings.runRelay = false;
     relayError = err.code === 'EADDRINUSE' ? `Le port ${settings.relayPort} est déjà utilisé.` : `Serveur non démarré : ${err.message}`;
   }
+}
+
+/** Login item: native on Windows and macOS; an XDG autostart entry on Linux. */
+const linuxAutostartFile = () => path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'autostart', 'bifrost.desktop');
+
+function getAutostart() {
+  if (process.platform === 'linux') return fs.existsSync(linuxAutostartFile());
+  return app.getLoginItemSettings().openAtLogin;
+}
+
+function setAutostart(on) {
+  if (process.platform === 'linux') {
+    const file = linuxAutostartFile();
+    if (!on) return fs.rmSync(file, { force: true });
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const exec = process.execPath.replace(/"/g, '\\"');
+    return fs.writeFileSync(
+      file,
+      `[Desktop Entry]
+Type=Application
+Name=Bifrost
+Exec="${exec}" --hidden
+X-GNOME-Autostart-enabled=true
+`,
+    );
+  }
+  return app.setLoginItemSettings({ openAtLogin: on, args: ['--hidden'] });
 }
 
 function pushState() {
@@ -279,9 +353,97 @@ function openViewer({ id, password = '', mode = 'control', label = '' }) {
 // --- the host -----------------------------------------------------------------------------------
 
 function desktopHelpers() {
-  // capture, input and clipboard come from the same Windows helpers as the CLI agent; the
-  // consent dialog and the banner are native windows of this app.
-  return { ...createWindowsHelpers(log), askConsent: openConsent, showIndicator: openIndicator };
+  // Windows: capture, input and clipboard come from the same helpers as the CLI agent.
+  // macOS / Linux: Electron's own capture and clipboard, xdotool / osascript for input.
+  // The consent dialog and the banner are native windows of this app on every platform.
+  const base = PORTABLE
+    ? createPortableHelpers({
+        log,
+        clipboard,
+        capture: createElectronCapture({ electron: { BrowserWindow, desktopCapturer, screen, ipcMain, session }, desktopDir: DESKTOP, log }),
+      })
+    : createWindowsHelpers(log);
+  return { ...base, askConsent: openConsent, showIndicator: openIndicator };
+}
+
+// --- Heimdall (assistant) -----------------------------------------------------------------------
+
+async function confirmAction(text) {
+  const opts = {
+    type: 'question',
+    buttons: ['Refuser', 'Autoriser'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+    title: 'Heimdall',
+    message: 'Heimdall demande l’autorisation d’agir sur cet ordinateur',
+    detail: text,
+  };
+  const r = mainWindow && !mainWindow.isDestroyed() ? await dialog.showMessageBox(mainWindow, opts) : await dialog.showMessageBox(opts);
+  return r.response === 1;
+}
+
+const heimdall = createHeimdall({
+  getConfig: () => {
+    const h = settings.heimdall;
+    const p = providerInfo(h.provider);
+    return { provider: p.id, model: h.model || p.defaultModel, apiKey: secrets.open(h.keys?.[p.id]) };
+  },
+  confirm: confirmAction,
+  log,
+});
+
+// --- updates ------------------------------------------------------------------------------------
+
+function createUpdater() {
+  let installDir = null;
+  if (app.isPackaged && !TEST_MODE) {
+    installDir = process.platform === 'darwin' ? path.resolve(process.execPath, '..', '..', '..') : path.dirname(process.execPath);
+  }
+  return new Updater({
+    currentVersion: app.getVersion(),
+    repo: process.env.BIFROST_UPDATE_REPO || undefined,
+    installDir,
+    exePath: process.execPath,
+    log,
+  });
+}
+
+async function checkForUpdate({ manual = false } = {}) {
+  if (update.status === 'downloading' || update.status === 'installing') return;
+  update = { ...update, status: 'checking', error: '' };
+  pushState();
+  try {
+    const r = await updater.check();
+    update = {
+      ...update,
+      status: r.available ? 'available' : 'none',
+      version: r.version,
+      notes: r.notes ?? '',
+      pageUrl: r.pageUrl ?? '',
+      canInstall: Boolean(r.canInstall),
+      checkedAt: Date.now(),
+      error: '',
+    };
+  } catch (err) {
+    // A silent background check must not nag; a manual one reports the problem.
+    update = { ...update, status: manual ? 'error' : 'idle', error: manual ? String(err.message ?? err) : '' };
+  }
+  pushState();
+  if (update.status === 'available') tray?.setToolTip(`Bifrost - mise à jour ${update.version} disponible`);
+}
+
+function receiveChat({ text, name }) {
+  if (typeof text !== 'string' || !text) return;
+  chatMessages = [...chatMessages, { from: 'peer', text, name: typeof name === 'string' ? name : '', ts: Date.now() }].slice(-MAX_CHAT_MESSAGES);
+  if (TEST_MODE || !Notification.isSupported()) return;
+  // Someone typed while this window is hidden or in the background: say so, without stealing focus.
+  if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isFocused()) {
+    const note = new Notification({ title: name ? `Bifrost - ${name}` : 'Bifrost - message', body: text.slice(0, 200) });
+    note.on('click', showMainWindow);
+    note.show();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.flashFrame(true);
+  }
 }
 
 function startHosting() {
@@ -291,9 +453,14 @@ function startHosting() {
     cfgFile: CFG_FILE,
     helpers: desktopHelpers(),
     log,
+    chat: true,
     onEvent: (e) => {
       if (e.type === 'status') hostStatus = e.status;
-      if (e.type === 'session') sessionInfo = e.phase === 'incoming' ? { ip: e.ip, phase: 'incoming' } : null;
+      if (e.type === 'session') {
+        sessionInfo = e.phase === 'incoming' ? { ip: e.ip, phase: 'incoming' } : null;
+        chatMessages = []; // a new session, or the end of one: the conversation is gone
+      }
+      if (e.type === 'chat') receiveChat(e);
       if (e.type === 'session' && e.phase === 'incoming' && !TEST_MODE) showMainWindow();
       pushState();
     },
@@ -344,6 +511,7 @@ function createTray() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Ouvrir Bifrost', click: showMainWindow },
+      { label: 'Rechercher une mise à jour', click: () => checkForUpdate({ manual: true }) },
       { type: 'separator' },
       {
         label: 'Quitter (ce PC ne sera plus joignable)',
@@ -435,9 +603,8 @@ function registerIpc() {
   handle('settings:set', (s) => {
     if (typeof s?.name === 'string') settings.name = s.name.slice(0, 40);
     if (typeof s?.minimizeToTray === 'boolean') settings.minimizeToTray = s.minimizeToTray;
-    if (typeof s?.autostart === 'boolean' && !TEST_MODE) {
-      app.setLoginItemSettings({ openAtLogin: s.autostart, args: ['--hidden'] });
-    }
+    if (typeof s?.autostart === 'boolean' && !TEST_MODE) setAutostart(s.autostart);
+    if (typeof s?.autoUpdate === 'boolean') settings.autoUpdate = s.autoUpdate;
     saveSettings();
     pushState();
   });
@@ -470,7 +637,74 @@ function registerIpc() {
     openViewer({ id: clean, password: typeof password === 'string' ? password : '', mode: mode === 'view' ? 'view' : 'control', label: who });
   });
 
+  handle('update:check', () => checkForUpdate({ manual: true }));
+  handle('update:install', async () => {
+    if (update.status !== 'available' || !update.canInstall) throw new Error('Aucune mise à jour installable.');
+    update = { ...update, status: 'downloading', progress: 0, error: '' };
+    pushState();
+    let last = 0;
+    try {
+      await updater.install((p) => {
+        if (Date.now() - last > 250) {
+          last = Date.now();
+          update = { ...update, progress: p };
+          pushState();
+        }
+      });
+    } catch (err) {
+      update = { ...update, status: 'error', error: String(err.message ?? err) };
+      pushState();
+      throw err;
+    }
+    update = { ...update, status: 'installing', progress: 1 };
+    pushState();
+    // the swap script waits for this process to exit, replaces the folder and starts it again
+    setTimeout(() => {
+      quitting = true;
+      app.quit();
+    }, 600);
+  });
+
+  handle('heimdall:set', (h) => {
+    const cur = settings.heimdall;
+    if (typeof h?.enabled === 'boolean') cur.enabled = h.enabled;
+    if (typeof h?.provider === 'string' && Object.hasOwn(PROVIDERS, h.provider)) cur.provider = h.provider;
+    if (typeof h?.model === 'string') cur.model = h.model.trim().slice(0, 80);
+    if (typeof h?.apiKey === 'string' && h.apiKey.trim()) {
+      const key = h.apiKey.trim();
+      if (key.length > 400 || /\s/.test(key)) throw new Error('Clé API non valide.');
+      cur.keys = { ...(cur.keys ?? {}), [cur.provider]: secrets.seal(key) };
+    }
+    if (h?.clearKey === true) {
+      const { [cur.provider]: _gone, ...rest } = cur.keys ?? {};
+      cur.keys = rest;
+    }
+    heimdall.reset();
+    saveSettings();
+    pushState();
+  });
+  handle('heimdall:ask', async (text) => {
+    if (!settings.heimdall.enabled) throw new Error('Heimdall est désactivé (Paramètres).');
+    if (typeof text !== 'string' || !text.trim() || text.length > 4000) throw new Error('Message non valide.');
+    return heimdall.ask(text.trim());
+  });
+  handle('heimdall:reset', () => heimdall.reset());
+  handle('external:open', async (url) => {
+    if (typeof url !== 'string' || !EXTERNAL_LINKS.has(url)) throw new Error('Adresse non autorisée.');
+    await shell.openExternal(url);
+  });
+  handle('update:page', async () => {
+    const u = update.pageUrl;
+    if (typeof u === 'string' && u.startsWith('https://github.com/')) await shell.openExternal(u);
+  });
+
   handle('session:end', () => host?.endSession());
+  handle('chat:send', (text) => {
+    if (typeof text !== 'string' || !text.trim() || text.length > 2000) throw new Error('Message vide ou trop long.');
+    if (!host?.sendChat(text)) throw new Error('Aucune session en cours : le message n’a pas été envoyé.');
+    chatMessages = [...chatMessages, { from: 'me', text: text.trim(), ts: Date.now() }].slice(-MAX_CHAT_MESSAGES);
+    pushState();
+  });
   handle('id:copy', () => clipboard.writeText(cfg.id));
   handle('transfers:open', async () => {
     const p = buildPermissions(cfg, { baseDir: HOME });
@@ -495,6 +729,9 @@ function registerIpc() {
   ipcMain.on('indicator:stop', (e) => indicatorData.get(e.sender.id)?.stop());
 
   // viewer windows
+  ipcMain.on('viewer:close', (e) => {
+    if (fromViewer(e)) BrowserWindow.fromWebContents(e.sender)?.destroy();
+  });
   ipcMain.on('viewer:init', (e) => {
     const p = fromViewer(e) ? viewerParams.get(e.sender.id) : null;
     if (!p) {
@@ -543,10 +780,15 @@ function registerProtocol() {
       return false;
     }
   };
+  const capturePage = (url) => url === 'bifrost://ui/capture.html';
+  const captureAllowed = new Set(['media', 'display-capture']);
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback, details) => {
-    callback(allowed.has(permission) && trusted(details.requestingUrl));
+    callback((allowed.has(permission) && trusted(details.requestingUrl)) || (captureAllowed.has(permission) && capturePage(details.requestingUrl)));
   });
-  session.defaultSession.setPermissionCheckHandler((_wc, permission, origin) => allowed.has(permission) && trusted(origin));
+  session.defaultSession.setPermissionCheckHandler(
+    (_wc, permission, origin, details) =>
+      (allowed.has(permission) && trusted(origin)) || (captureAllowed.has(permission) && capturePage(details?.requestingUrl ?? origin)),
+  );
 }
 
 app.on('web-contents-created', (_e, wc) => {
@@ -562,6 +804,7 @@ if (!TEST_MODE && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => showMainWindow());
+  app.on('activate', () => showMainWindow()); // macOS: click on the Dock icon
 
   app.whenReady().then(async () => {
     loadSettings();
@@ -572,10 +815,18 @@ if (!TEST_MODE && !app.requestSingleInstanceLock()) {
 
     registerProtocol();
     registerIpc();
+    updater = createUpdater();
     if (settings.runRelay && !TEST_MODE) await applyRelay();
     createMainWindow({ hidden: process.argv.includes('--hidden') });
     if (!TEST_MODE) createTray();
     startHosting();
+
+    if (!TEST_MODE) {
+      // look for a new release shortly after start, then every 6 hours
+      const auto = () => settings.autoUpdate && checkForUpdate();
+      setTimeout(auto, 20_000).unref();
+      setInterval(auto, 6 * 60 * 60 * 1000).unref();
+    }
 
     if (TEST_MODE) await runScenario();
   });

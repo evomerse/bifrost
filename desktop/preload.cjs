@@ -22,9 +22,17 @@ contextBridge.exposeInMainWorld('bifrost', {
   setRelay: (enabled, port) => invoke('relay:set', { enabled, port }),
   connect: (target) => invoke('connect', target),
   endSession: () => invoke('session:end'),
+  sendChat: (text) => invoke('chat:send', text),
   copyId: () => invoke('id:copy'),
   openTransfers: () => invoke('transfers:open'),
   quit: () => invoke('app:quit'),
+  checkUpdate: () => invoke('update:check'),
+  installUpdate: () => invoke('update:install'),
+  openUpdatePage: () => invoke('update:page'),
+  setHeimdall: (h) => invoke('heimdall:set', h),
+  askHeimdall: (text) => invoke('heimdall:ask', text),
+  resetHeimdall: () => invoke('heimdall:reset'),
+  openExternal: (url) => invoke('external:open', url),
 });
 
 contextBridge.exposeInMainWorld('bifrostConsent', {

@@ -42,14 +42,14 @@ async function configWithPassword(password, extra = {}) {
 }
 
 /** A Session wired to fake OS helpers. */
-function harness({ config, consent = true, guard = new PasswordGuard(), adaptIntervalMs = 60_000, keyframeMinIntervalMs = 0, permissions }) {
+function harness({ config, consent = true, guard = new PasswordGuard(), adaptIntervalMs = 60_000, keyframeMinIntervalMs = 0, permissions, chat }) {
   const sent = []; // plaintext JSON toward the viewer
   const binary = []; // encrypted packets toward the viewer
   const events = {
     input: [], captureStarted: 0, indicator: null, ended: null, consentAsked: 0, consentText: '',
     keyRequests: 0, bitrates: [], captureOptions: null,
     clipboardStarted: 0, clipboardSet: [], clipboardChange: null, consentTexts: [],
-    monitorRequests: [], onMonitors: null,
+    monitorRequests: [], onMonitors: null, chat: [],
   };
   let buffered = 0;
   const helpers = {
@@ -94,14 +94,15 @@ function harness({ config, consent = true, guard = new PasswordGuard(), adaptInt
     adaptIntervalMs,
     keyframeMinIntervalMs,
     ...(permissions ? { permissions } : {}),
+    ...(chat ? { chat: true, onChat: (text, name) => events.chat.push({ text, name }) } : {}),
     onEnd: (r) => (events.ended = r),
   });
   return { session, sent, binary, events, guard, setBuffered: (n) => (buffered = n) };
 }
 
 /** Plays the viewer side of the handshake against a session. */
-async function connect({ config, consent, guard, password = '', mode = 'control', label = 'Nathan', codecs = ['jpeg'], adaptIntervalMs, permissions }) {
-  const h = harness({ config, consent, guard, adaptIntervalMs, permissions });
+async function connect({ config, consent, guard, password = '', mode = 'control', label = 'Nathan', codecs = ['jpeg'], adaptIntervalMs, permissions, chat }) {
+  const h = harness({ config, consent, guard, adaptIntervalMs, permissions, chat });
   h.session.begin();
   const challenge = h.sent.find((m) => m.t === 'challenge');
   const viewer = new ViewerE2E({ id: config.id, password });
@@ -630,6 +631,53 @@ test('a viewer keyframe request is forwarded, even in view-only mode', async () 
   const before = c.events.keyRequests;
   await c.input({ t: 'key' });
   assert.equal(c.events.keyRequests, before + 1);
+});
+
+test('chat: off unless the host app can show it, and then it works both ways', async () => {
+  const off = await connect({ config: { id: ID }, consent: true });
+  assert.deepEqual(await off.receive(), [{ t: 'waiting-consent' }, { t: 'accepted', mode: 'control' }, PERM_OFF]);
+  await off.input({ t: 'chat', text: 'bonjour' });
+  assert.deepEqual(off.events.chat, [], 'no chat without a UI to show it');
+  assert.equal(off.session.sendChat('salut'), false);
+
+  const c = await connect({ config: { id: ID }, consent: true, chat: true, label: 'Nathan' });
+  assert.deepEqual(await c.receive(), [
+    { t: 'waiting-consent' },
+    { t: 'accepted', mode: 'control' },
+    { t: 'perm', clipboard: false, chat: true, files: 'deny', roots: [] },
+  ]);
+  await c.input({ t: 'chat', text: '  Bonjour, c’est moi 😀  ' });
+  assert.deepEqual(c.events.chat, [{ text: 'Bonjour, c’est moi 😀', name: 'Nathan' }]);
+  assert.equal(c.session.sendChat('Bonjour !'), true);
+  await waitFor(() => c.binary.length > 3, 'chat packet');
+  assert.deepEqual((await c.receive()).filter((m) => m.t === 'chat'), [{ t: 'chat', text: 'Bonjour !' }]);
+});
+
+test('chat: allowed in view-only mode, validated, flood-limited', async () => {
+  const c = await connect({ config: { id: ID }, consent: true, chat: true, mode: 'view' });
+  await c.receive();
+  await c.input({ t: 'chat', text: 'vue seule' });
+  await c.input({ t: 'chat', text: 42 });
+  await c.input({ t: 'chat', text: '   ' });
+  await c.input({ t: 'chat', text: 'a\u0000b\u0007c' });
+  await c.input({ t: 'chat', text: 'x'.repeat(5000) });
+  assert.equal(c.events.chat[0].text, 'vue seule');
+  assert.equal(c.events.chat[1].text, 'abc', 'control characters are stripped');
+  assert.equal(c.events.chat[2].text.length, 2000, 'cut to the maximum');
+  assert.equal(c.events.chat.length, 3);
+  for (let i = 0; i < 40; i++) await c.input({ t: 'chat', text: `spam ${i}` });
+  assert.ok(c.events.chat.length <= 20, `flood is limited (got ${c.events.chat.length})`);
+  assert.equal(c.events.input.length, 0, 'a chat line is never input');
+});
+
+test('chat: a finished session sends nothing more', async () => {
+  const c = await connect({ config: { id: ID }, consent: true, chat: true });
+  await c.receive();
+  c.session.end('stopped-by-host', { notifyPeer: true, leave: true });
+  await tick();
+  assert.equal(c.session.sendChat('trop tard'), false);
+  await c.input({ t: 'chat', text: 'apres la fin' }).catch(() => {});
+  assert.deepEqual(c.events.chat, []);
 });
 
 test('stopping from the indicator sends an encrypted bye then leaves', async () => {
