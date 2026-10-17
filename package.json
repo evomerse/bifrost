@@ -1,6 +1,6 @@
 {
     "name":  "bifrost",
-    "version":  "0.3.2",
+    "version":  "0.3.3",
     "description":  "Prise en main a distance auto-hebergee : serveur de connexion, agent hote Windows et visionneuse web.",
     "type":  "module",
     "license":  "AGPL-3.0-or-later",
