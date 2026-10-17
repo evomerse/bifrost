@@ -405,7 +405,8 @@ L'application de bureau fonctionne aussi sur macOS et Linux (voir le tableau du 
 3. Un contrôleur Windows/Linux envoie **Ctrl** pour ses raccourcis : sur le Mac, Bifrost le traduit en **Commande** (Ctrl+C copie, Ctrl+V colle).
 
 **Linux**
-1. Une session **X11** (pas Wayland) et le paquet `xdotool` : `sudo apt install xdotool`. Sous Wayland l'écran peut être vu (portail PipeWire) mais la souris et le clavier ne peuvent pas être pilotés ; connectez-vous à une session « Xorg ».
+1. **Wayland** (défaut de GNOME et de KDE Plasma récents) : Bifrost passe par le portail « bureau à distance » du système. À la première prise en main, une fenêtre du système s'ouvre **sur l'ordinateur contrôlé** (« autoriser le partage d'écran et le contrôle ») : choisissez l'écran et validez. L'autorisation est mémorisée pour les sessions suivantes ; sans elle, la prise en main reste sans effet, donc quelqu'un doit être devant la machine la première fois. Il faut le portail de votre bureau (`xdg-desktop-portal-gnome` ou `xdg-desktop-portal-kde`).
+   **X11** : le paquet `xdotool` suffit : `sudo apt install xdotool`.
 2. Zone de notification : une extension d'icônes d'état est nécessaire sous GNOME.
 3. Le démarrage automatique crée `~/.config/autostart/bifrost.desktop`.
 

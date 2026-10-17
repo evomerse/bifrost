@@ -416,6 +416,7 @@ function desktopHelpers() {
     ? createPortableHelpers({
         log,
         clipboard,
+        portalTokenFile: path.join(app.getPath('userData'), 'portal-token.json'),
         capture: createElectronCapture({ electron: { BrowserWindow, desktopCapturer, screen, ipcMain, session }, desktopDir: DESKTOP, log }),
       })
     : createWindowsHelpers(log);

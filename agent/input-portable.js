@@ -7,7 +7,7 @@
 //   u <codepoint>          one UTF-16 code unit of typed text
 // The platform-specific part is a small "backend": xdotool on Linux (X11), a long-running
 // osascript (JXA + CoreGraphics) on macOS. Wayland sessions do not allow synthetic input from a
-// plain program: there the injection silently does nothing (see INSTALLATION.md).
+// plain program: they use the desktop portal instead (input-wayland.js).
 import { spawn } from 'node:child_process';
 
 // [scancode, extended, X11 keysym, macOS virtual key code]
@@ -65,6 +65,11 @@ export class PortableInput {
       case 'm': {
         if (!this.rect || !Number.isFinite(n(1)) || !Number.isFinite(n(2))) break;
         const { x, y, w, h } = this.rect;
+        // Wayland (portal): positions are relative to a shared monitor, not global pixels
+        if (this.backend.moveNormalized) {
+          this.backend.moveNormalized(clamp01(n(1)), clamp01(n(2)), this.rect);
+          break;
+        }
         this.backend.move(Math.round(x + clamp01(n(1)) * (w - 1)), Math.round(y + clamp01(n(2)) * (h - 1)));
         break;
       }

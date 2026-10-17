@@ -3,16 +3,19 @@
 //   capture   : { startCapture(opts) } supplied by desktop/capture-electron.mjs
 //   clipboard : Electron's clipboard module ({ readText, writeText })
 import { createPortableInput } from './input-portable.js';
+import { createLinuxInput } from './input-wayland.js';
 
 const CLIPBOARD_POLL_MS = 500;
 const MAX_CLIPBOARD_BYTES = 1024 * 1024;
 
-export function createPortableHelpers({ log = () => {}, capture, clipboard, platform = process.platform, createInput = createPortableInput }) {
+export function createPortableHelpers({ log = () => {}, capture, clipboard, platform = process.platform, portalTokenFile = null, createInput = null }) {
+  // Linux: the desktop portal on Wayland, xdotool on X11; macOS: osascript
+  const makeInput = createInput ?? (platform === 'linux' ? (o) => createLinuxInput({ ...o, tokenFile: portalTokenFile }) : createPortableInput);
   return {
     startCapture: (opts) => capture.startCapture(opts),
 
     startInput() {
-      const input = createInput({ platform, log });
+      const input = makeInput({ platform, log });
       return { send: (line) => input.send(line), stop: () => input.stop() };
     },
 

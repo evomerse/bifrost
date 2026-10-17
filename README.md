@@ -51,9 +51,9 @@ Sécurité de l'application : fenêtres isolées (sandbox, pas de Node.js dans l
 | | Windows | macOS | Linux |
 |---|---|---|---|
 | Capture | assistant natif H.264 (repli PowerShell) | Electron, JPEG | Electron, JPEG |
-| Souris / clavier | `SendInput` | CoreGraphics via `osascript` | `xdotool` (X11) |
+| Souris / clavier | `SendInput` | CoreGraphics via `osascript` | portail « RemoteDesktop » (Wayland) ou `xdotool` (X11) |
 | Presse-papiers | assistant PowerShell | Electron | Electron |
-| Droits à accorder | aucun | *Enregistrement de l'écran* + *Accessibilité* | une session X11 et `xdotool` installé |
+| Droits à accorder | aucun | *Enregistrement de l'écran* + *Accessibilité* | Wayland : accepter la fenêtre du système au premier contrôle ; X11 : `xdotool` installé |
 | Service avant l'ouverture de session | oui | non | non |
 | Agent en ligne de commande | oui | non (application seulement) | non (application seulement) |
 
@@ -254,7 +254,7 @@ Poignée de main en JSON clair (rien de secret n'y circule), puis **tout est chi
 - **Cadence** : environ 25 images/s à 1080p. Le plafond est la copie d'écran GDI (~30 ms par image sur un écran 1440p) ; le passer au-dessus de 30 demande la capture par DXGI Desktop Duplication, non faite.
 - **Décodage H.264 vérifié dans Chromium (Electron 44 / Chrome 152) seulement** : l'application de bureau l'a fait fonctionner en conditions réelles (image 1920×1080 décodée par WebCodecs, couleurs plausibles, permissions et fichiers via la page). Chrome, Edge et Opera partagent ce moteur ; Firefox et Safari n'ont pas été essayés et retombent automatiquement en JPEG si WebCodecs ou le profil H.264 leur manque. Les couleurs supposent la matrice BT.709 sans en-tête VUI.
 - **Pas de WebRTC** : le transport reste le relais WebSocket (TCP) : pas de pair-à-pair, pas de contrôle de congestion propre à la vidéo en temps réel. Le gain de fluidité vient du codec H.264, pas du transport.
-- **Pas encore** : images ou fichiers dans le presse-papiers (texte seulement), explorateur de fichiers sur tout le disque, son, chat, impression, mobile, installeur signé ; sur macOS et Linux : H.264 (JPEG seulement), service avant l'ouverture de session, agent en ligne de commande, Wayland (pas d'injection d'entrées).
+- **Pas encore** : images ou fichiers dans le presse-papiers (texte seulement), explorateur de fichiers sur tout le disque, son, chat, impression, mobile, installeur signé ; sur macOS et Linux : H.264 (JPEG seulement), service avant l'ouverture de session, agent en ligne de commande.
 - **Le service SYSTEM n'a été testé qu'en partie** : compilation, installation par étapes, supervision (démarrage, relance, nettoyage d'un agent orphelin) et lancement via duplication de jeton, avec vos propres droits. Le suivi du bureau sécurisé (écran de verrouillage, UAC) et l'exécution réelle en SYSTEM n'ont pas pu être exercés sans droits administrateur : suivez la liste « À vérifier » ci-dessus.
 - **Un service SYSTEM avec accès sans surveillance est un accès total à la machine** : la sécurité repose sur le mot de passe (12 caractères minimum, blocage 5 min après 5 échecs) et sur le serveur relais. Mot de passe long et unique, serveur en HTTPS.
 - Ctrl+Alt+Suppr ne peut pas être envoyé à distance pour l'instant (il faut appeler `SendSAS` depuis le service et régler la stratégie `SoftwareSASGeneration`, non fait).

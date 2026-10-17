@@ -13,6 +13,22 @@ import { packager } from '@electron/packager';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 
+// Production dependencies and what they need (ws, dbus-next for Wayland input), found by walking
+// the "dependencies" fields: the build tools and the electron package stay out.
+function runtimeModules() {
+  const seen = new Set();
+  const walk = (name) => {
+    if (seen.has(name)) return;
+    seen.add(name);
+    const file = path.join(ROOT, 'node_modules', name, 'package.json');
+    if (!fs.existsSync(file)) return;
+    for (const dep of Object.keys(JSON.parse(fs.readFileSync(file, 'utf8')).dependencies ?? {})) walk(dep);
+  };
+  Object.keys(pkg.dependencies ?? {}).forEach(walk);
+  return seen;
+}
+const RUNTIME = runtimeModules();
+
 // Everything that is not needed at run time (paths are relative to the project, with a slash).
 const EXCLUDE = [
   /^\/test(\/|$)/,
@@ -23,8 +39,13 @@ const EXCLUDE = [
   /^\/\.git/,
   /^\/\.gitignore$/,
   /^\/package-lock\.json$/,
-  // runtime dependency is ws only; the build tools (and the electron package) stay out
-  /^\/node_modules\/(?!ws(\/|$)).+/,
+  // only the runtime dependencies stay in node_modules
+  (file) => {
+    const m = /^\/node_modules\/((?:@[^/]+\/)?[^/]+)(\/|$)/.exec(file);
+    if (!m || /^@[^/]+$/.test(m[1])) return false; // node_modules itself, or a scope folder
+    return !RUNTIME.has(m[1]);
+  },
+  /^\/node_modules\/\.bin(\/|$)/,
   /^\/desktop\/assets\/make-icons\.ps1$/,
   /^\/desktop\/assets\/logo-source\.jpg$/,
 ];
@@ -54,7 +75,7 @@ const paths = await packager({
   asar: false,
   prune: true,
   overwrite: true,
-  ignore: (file) => EXCLUDE.some((re) => re.test(file)),
+  ignore: (file) => EXCLUDE.some((rule) => (typeof rule === 'function' ? rule(file) : rule.test(file))),
   win32metadata: platform !== 'win32' ? undefined : {
     CompanyName: 'Bifrost',
     FileDescription: 'Bifrost - prise en main a distance',
